@@ -151,6 +151,7 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::patch('/settings/locations/{location}', [LocationController::class, 'update'])->middleware('permission:settings.manage')->name('settings.locations.update');
     Route::patch('/settings/staff/{staff}', [SettingsController::class, 'updateStaff'])->middleware(['throttle:20,1', 'permission:staff.manage'])->name('settings.staff.update');
     Route::post('/settings/staff', [SettingsController::class, 'storeStaff'])->middleware(['throttle:10,1', 'permission:staff.manage'])->name('settings.staff.store');
+    Route::get('/roles-permissions', [SettingsController::class, 'staffAccess'])->middleware('permission:staff.manage')->name('roles-permissions.index');
     Route::put('/settings/late-return-policy', [SettingsController::class, 'updateLateReturnPolicy'])->middleware(['throttle:10,1', 'permission:settings.manage'])->name('settings.late-return-policy.update');
     Route::put('/settings/late-return-policy-overrides', [SettingsController::class, 'saveLateReturnOverride'])->middleware(['throttle:20,1', 'permission:settings.manage'])->name('settings.late-return-policy-overrides.save');
     Route::delete('/settings/late-return-policy-overrides/{policy}', [SettingsController::class, 'deleteLateReturnOverride'])->middleware(['throttle:20,1', 'permission:settings.manage'])->name('settings.late-return-policy-overrides.delete');

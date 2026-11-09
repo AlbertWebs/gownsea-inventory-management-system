@@ -35,6 +35,25 @@ use Inertia\Response;
 
 class SettingsController extends Controller
 {
+    public function staffAccess(Request $request): Response
+    {
+        abort_unless($request->user()->mayViewAllLocations(), 403);
+
+        return Inertia::render('RolesPermissions/Index', [
+            'locations' => Location::query()->orderBy('type')->orderBy('name')->get(['id', 'name', 'is_active']),
+            'staff' => User::query()->with('locations:id,name')->orderBy('name')->get(['id', 'name', 'email', 'role', 'is_active', 'permissions'])->map(function (User $staff): array {
+                return [
+                    ...$staff->only(['id', 'name', 'email', 'role', 'is_active']),
+                    'permissions' => $staff->effectivePermissions(),
+                    'locations' => $staff->locations,
+                ];
+            }),
+            'permissionOptions' => collect(['storekeeper', 'sales_crm', 'finance', 'production', 'management'])
+                ->mapWithKeys(fn (string $role): array => [$role => PermissionCatalog::labelsForRole($role)]),
+            'actorRole' => $request->user()->role,
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         abort_unless($request->user()->mayViewAllLocations(), 403);
@@ -58,15 +77,6 @@ class SettingsController extends Controller
 
         return Inertia::render('Settings/Index', [
             'locations' => Location::query()->withCount('assets')->orderBy('type')->orderBy('name')->get(),
-            'staff' => User::query()->with('locations:id,name')->orderBy('name')->get(['id', 'name', 'email', 'role', 'is_active', 'permissions'])->map(function (User $staff): array {
-                return [
-                    ...$staff->only(['id', 'name', 'email', 'role', 'is_active']),
-                    'permissions' => $staff->effectivePermissions(),
-                    'locations' => $staff->locations,
-                ];
-            }),
-            'permissionOptions' => collect(['storekeeper', 'sales_crm', 'finance', 'production', 'management'])
-                ->mapWithKeys(fn (string $role): array => [$role => PermissionCatalog::labelsForRole($role)]),
             'classifications' => AcademicClassification::query()->orderBy('sort_order')->get(),
             'institutions' => Institution::query()->withCount(['customers', 'events'])->orderBy('name')->get(),
             'lateReturnPolicy' => LateReturnPolicy::formValues(),

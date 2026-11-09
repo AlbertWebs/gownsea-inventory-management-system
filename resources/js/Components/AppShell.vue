@@ -4,7 +4,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
 import {
     Bell, Boxes, CalendarClock, ChartNoAxesCombined, ChevronDown, ChevronRight, ClipboardList,
-    Landmark, LayoutDashboard, LogOut, MapPinned, Menu, Search, Settings, UserRoundCog, UsersRound, WalletCards, X,
+    KeyRound, Landmark, LayoutDashboard, LogOut, MapPinned, Menu, Search, Settings, UserRoundCog, UsersRound, WalletCards, X,
 } from '@lucide/vue';
 
 type User = { id: number; name: string; email: string; role: string };
@@ -41,6 +41,7 @@ const navigation = computed(() => [
     { label: 'Graduation Events', href: '/events', key: 'events', icon: CalendarClock },
     ...(user.value && ['super_admin', 'management'].includes(user.value.role) ? [
         { label: 'Institutions', href: '/institutions', key: 'institutions', icon: Landmark },
+        { label: 'Roles & Permissions', href: '/roles-permissions', key: 'roles-permissions', icon: KeyRound },
         { label: 'Settings', href: '/settings', key: 'settings', icon: Settings },
     ] : []),
 ]);
