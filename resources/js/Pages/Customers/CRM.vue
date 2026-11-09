@@ -68,9 +68,9 @@ function followUpLabel(value: string | null): string {
 </script>
 
 <template>
-    <Head title="Customers & CRM" />
-    <AppShell active="customers">
-        <div class="page-heading"><div><h1>Customers & CRM</h1><p>Track institutional prospects, follow-ups and pipeline value by branch.</p></div><div class="heading-actions"><Link href="/quotations" class="secondary-link">Quotations</Link><Link href="/customers" class="secondary-link">Customer directory</Link></div></div>
+    <Head title="CRM" />
+    <AppShell active="crm">
+        <div class="page-heading"><div><h1>Customer CRM</h1><p>Track institutional prospects, follow-ups and pipeline value by branch.</p></div><div class="heading-actions"><Link href="/quotations" class="secondary-link">Quotations</Link><Link href="/customers" class="secondary-link">Customer directory</Link></div></div>
         <div class="pipeline-summary"><article v-for="stage in stageOptions" :key="stage.id" class="panel pipeline-card"><span>{{ stage.label }}</span><strong>{{ stages[stage.id]?.count ?? 0 }}</strong><small>{{ kes(stages[stage.id]?.value_minor ?? 0) }}</small></article></div>
         <div class="reminder-strip"><strong>Follow-up tasks</strong><span>{{ openTasks.length }} open</span><span :class="overdueTasks ? 'overdue-label' : ''">{{ overdueTasks }} overdue</span><small>Showing tasks attached to leads on this page.</small></div>
         <section v-if="canManage" class="panel lead-form-panel">

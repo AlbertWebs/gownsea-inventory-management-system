@@ -4,7 +4,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
 import {
     Bell, Boxes, CalendarClock, ChartNoAxesCombined, ChevronDown, ChevronRight, ClipboardList,
-    LayoutDashboard, LogOut, MapPinned, Menu, Search, Settings, UsersRound, WalletCards, X,
+    Landmark, LayoutDashboard, LogOut, MapPinned, Menu, Search, Settings, UserRoundCog, UsersRound, WalletCards, X,
 } from '@lucide/vue';
 
 type User = { id: number; name: string; email: string; role: string };
@@ -31,14 +31,18 @@ const navigation = computed(() => [
     { label: 'Dashboard', href: '/', key: 'dashboard', icon: LayoutDashboard },
     { label: 'Inventory', href: '/inventory', key: 'inventory', icon: Boxes },
     { label: 'Hiring & Returns', href: '/hiring', key: 'hiring', icon: CalendarClock },
-    { label: 'Customers & CRM', href: '/crm', key: 'customers', icon: UsersRound },
+    { label: 'Customers', href: '/customers', key: 'customers', icon: UsersRound },
+    { label: 'CRM', href: '/crm', key: 'crm', icon: UserRoundCog },
     { label: 'Custom Orders', href: '/custom-orders', key: 'custom-orders', icon: ClipboardList },
     { label: 'Locations & Transfers', href: '/transfers', key: 'transfers', icon: MapPinned },
     { label: 'Sales & Payments', href: '/payments', key: 'payments', icon: WalletCards },
     { label: 'Finance', href: '/finance', key: 'finance', icon: ChartNoAxesCombined },
     { label: 'Reports', href: '/reports', key: 'reports', icon: ChartNoAxesCombined },
     { label: 'Graduation Events', href: '/events', key: 'events', icon: CalendarClock },
-    ...(user.value && ['super_admin', 'management'].includes(user.value.role) ? [{ label: 'Settings', href: '/settings', key: 'settings', icon: Settings }] : []),
+    ...(user.value && ['super_admin', 'management'].includes(user.value.role) ? [
+        { label: 'Institutions', href: '/settings#institutions', key: 'institutions', icon: Landmark },
+        { label: 'Settings', href: '/settings', key: 'settings', icon: Settings },
+    ] : []),
 ]);
 
 watch(query, (value) => {
