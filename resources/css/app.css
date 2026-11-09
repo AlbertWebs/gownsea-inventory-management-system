@@ -96,7 +96,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .profile-chevron { width: 15px; color: #394050; }
 .mobile-brand { display: none; }
 .page-content { max-width: 1700px; margin: 0 auto; padding: 26px 28px 24px; }
-.page-content.dashboard-page-content { width: 90%; }
+.page-content.dashboard-page-content { width: 100%; max-width: none; }
 .intro-row { position: relative; display: flex; min-height: 111px; align-items: center; justify-content: space-between; gap: 14px; overflow: hidden; margin: -4px -3px 13px; padding: 0 6px; }
 .intro-copy { position: relative; z-index: 2; min-width: 355px; }
 .eyebrow { margin: 0 0 6px; color: #6b727f; font-size: 12px; font-weight: 600; letter-spacing: .055em; text-transform: uppercase; }
