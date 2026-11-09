@@ -81,6 +81,7 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/returns/scan', [ReturnController::class, 'store'])->middleware(['throttle:60,1', 'permission:hiring.return'])->name('returns.scan.store');
     Route::post('/returns/bulk', [ReturnController::class, 'returnBulk'])->middleware(['throttle:30,1', 'permission:hiring.return'])->name('returns.bulk.store');
     Route::get('/customers', [CustomerController::class, 'index'])->middleware('permission:customers.view')->name('customers.index');
+    Route::get('/institutions', [InstitutionController::class, 'index'])->middleware('permission:settings.manage')->name('institutions.index');
     Route::get('/customers/create', [CustomerController::class, 'create'])->middleware('permission:customers.manage')->name('customers.create');
     Route::post('/customers', [CustomerController::class, 'store'])->middleware(['throttle:30,1', 'permission:customers.manage'])->name('customers.store');
     Route::patch('/customers/{customer}/sms-consent', [CustomerController::class, 'updateSmsConsent'])->middleware(['throttle:30,1', 'permission:customers.manage'])->name('customers.sms-consent.update');

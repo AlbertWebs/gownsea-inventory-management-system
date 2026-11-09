@@ -40,7 +40,7 @@ const navigation = computed(() => [
     { label: 'Reports', href: '/reports', key: 'reports', icon: ChartNoAxesCombined },
     { label: 'Graduation Events', href: '/events', key: 'events', icon: CalendarClock },
     ...(user.value && ['super_admin', 'management'].includes(user.value.role) ? [
-        { label: 'Institutions', href: '/settings#institutions', key: 'institutions', icon: Landmark },
+        { label: 'Institutions', href: '/institutions', key: 'institutions', icon: Landmark },
         { label: 'Settings', href: '/settings', key: 'settings', icon: Settings },
     ] : []),
 ]);
