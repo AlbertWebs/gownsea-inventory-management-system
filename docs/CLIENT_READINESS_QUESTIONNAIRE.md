@@ -174,13 +174,13 @@ The backfill tool can preview eligible hires and completed custom orders, but th
 
 Provider adapters are implemented, but credentials and live end-to-end delivery have not been verified.
 
-1. **SMS provider:** Confirm the provider/account GOWNSEA will use (currently expected to be Onfon).
+1. **SMS provider:** Confirm the Techrise account and sender ID approved for GOWNSEA.
    - Provider/account name: ____________________
    - Technical/business contact: ____________________
    - Are the credentials previously stored in `Gownsea.pdf` revoked and replaced? [ ] Yes [ ] No
    - Rotation completion date/reference: ____________________
    - Delivery callback/status endpoint requirements and provider confirmation: ____________________
-   - **Recommended:** Continue with Onfon after confirming the active account, pricing, sender ID, delivery reports and API functionality. Rotate credentials previously included in shared documentation.
+   - **Recommended:** Confirm the active Techrise account, pricing, sender ID, delivery reports and API functionality before enabling transactional messages.
 
 2. **SMS sandbox test:**
    - Sandbox enabled/contact: ____________________

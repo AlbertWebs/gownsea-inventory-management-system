@@ -43,6 +43,13 @@ return [
         'sender_id' => env('ONFON_SMS_SENDER_ID', 'GOWNSEA'),
     ],
 
+    'techrise' => [
+        'endpoint' => env('TECHRISE_SMS_ENDPOINT', 'https://api.techrisesms.co.ke/v1/sms/send'),
+        'client_id' => env('TECHRISE_SMS_CLIENT_ID'),
+        'api_key' => env('TECHRISE_SMS_API_KEY'),
+        'sender_id' => env('TECHRISE_SMS_SENDER_ID', 'GOWNSEA'),
+    ],
+
     'daraja' => [
         'enabled' => (bool) env('DARAJA_ENABLED', false),
         'environment' => env('DARAJA_ENVIRONMENT', 'sandbox'),

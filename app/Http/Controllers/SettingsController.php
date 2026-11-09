@@ -60,9 +60,9 @@ class SettingsController extends Controller
         $backupDirectory = rtrim((string) config('services.gownsea_backup.directory'), DIRECTORY_SEPARATOR);
         $backups = glob($backupDirectory.DIRECTORY_SEPARATOR.'*.gwbak') ?: [];
         usort($backups, fn (string $left, string $right): int => filemtime($right) <=> filemtime($left));
-        $onfon = app(IntegrationSettings::class)->onfon();
+        $techrise = app(IntegrationSettings::class)->techrise();
         $daraja = app(IntegrationSettings::class)->daraja();
-        $onfonConfigured = filled($onfon['client_id']) && filled($onfon['api_key']) && filled($onfon['access_key']);
+        $smsConfigured = filled($techrise['client_id']) && filled($techrise['api_key']) && filled($techrise['sender_id']);
         $darajaConfigured = app(IntegrationSettings::class)->darajaEnabled($daraja);
         $databaseAvailable = true;
         try {
@@ -92,7 +92,7 @@ class SettingsController extends Controller
                 'queueDriver' => $queueDriver,
                 'queuedJobs' => $queueDriver === 'database' && $jobsTableAvailable ? DB::table('jobs')->count() : null,
                 'failedJobs' => $failedJobsTableAvailable ? DB::table('failed_jobs')->count() : null,
-                'smsConfigured' => $onfonConfigured,
+                'smsConfigured' => $smsConfigured,
                 'smsQueued' => $smsTableAvailable ? DB::table('sms_messages')->whereIn('status', ['queued', 'pending'])->count() : null,
                 'darajaConfigured' => $darajaConfigured,
                 'darajaEnvironment' => $daraja['environment'],
@@ -180,7 +180,7 @@ class SettingsController extends Controller
         }
 
         if ($section === 'provider-integrations') {
-            foreach (['onfon_client_id', 'onfon_api_key', 'onfon_access_key', 'daraja_consumer_key', 'daraja_consumer_secret', 'daraja_shortcode', 'daraja_passkey', 'daraja_callback_token'] as $key) {
+            foreach (['techrise_client_id', 'techrise_api_key', 'daraja_consumer_key', 'daraja_consumer_secret', 'daraja_shortcode', 'daraja_passkey', 'daraja_callback_token'] as $key) {
                 if (blank($data[$key] ?? null)) {
                     if (array_key_exists($key, $previousConfiguration)) {
                         $data[$key] = $previousConfiguration[$key];
@@ -422,10 +422,10 @@ class SettingsController extends Controller
                 'management_approval_date' => '', 'reconciliation_reference' => '', 'backup_restore_reference' => '',
             ]),
             'providerIntegrations' => $this->providerIntegrationFormValues($valueFor('provider_integrations', [
-                'onfon_endpoint' => config('services.onfon.endpoint'), 'onfon_sender_id' => config('services.onfon.sender_id'),
+                'techrise_endpoint' => config('services.techrise.endpoint'), 'techrise_sender_id' => config('services.techrise.sender_id'),
                 'daraja_enabled' => (bool) config('services.daraja.enabled'), 'daraja_environment' => config('services.daraja.environment'),
-                'daraja_transaction_type' => config('services.daraja.transaction_type'), 'onfon_test_reference' => '',
-                'onfon_tested_at' => '', 'daraja_test_reference' => '', 'daraja_tested_at' => '', 'daraja_callback_reference' => '',
+                'daraja_transaction_type' => config('services.daraja.transaction_type'), 'techrise_test_reference' => '',
+                'techrise_tested_at' => '', 'daraja_test_reference' => '', 'daraja_tested_at' => '', 'daraja_callback_reference' => '',
             ])),
             'deploymentProfile' => $valueFor('deployment_profile', [
                 'deployment_stage' => 'planned', 'aws_region' => 'af-south-1', 'aws_account_alias' => '',
@@ -442,11 +442,10 @@ class SettingsController extends Controller
      */
     private function providerIntegrationFormValues(array $values): array
     {
-        foreach (['onfon_client_id', 'onfon_api_key', 'onfon_access_key', 'daraja_consumer_key', 'daraja_consumer_secret', 'daraja_shortcode', 'daraja_passkey', 'daraja_callback_token'] as $key) {
+        foreach (['techrise_client_id', 'techrise_api_key', 'daraja_consumer_key', 'daraja_consumer_secret', 'daraja_shortcode', 'daraja_passkey', 'daraja_callback_token'] as $key) {
             $environmentKey = match ($key) {
-                'onfon_client_id' => 'services.onfon.client_id',
-                'onfon_api_key' => 'services.onfon.api_key',
-                'onfon_access_key' => 'services.onfon.access_key',
+                'techrise_client_id' => 'services.techrise.client_id',
+                'techrise_api_key' => 'services.techrise.api_key',
                 'daraja_consumer_key' => 'services.daraja.consumer_key',
                 'daraja_consumer_secret' => 'services.daraja.consumer_secret',
                 'daraja_shortcode' => 'services.daraja.shortcode',
@@ -455,6 +454,10 @@ class SettingsController extends Controller
             };
             $values[$key.'_configured'] = filled($values[$key] ?? null) || filled(config($environmentKey));
             unset($values[$key]);
+        }
+
+        foreach (['onfon_client_id', 'onfon_api_key', 'onfon_access_key'] as $legacySecretKey) {
+            unset($values[$legacySecretKey], $values[$legacySecretKey.'_configured']);
         }
 
         return $values;

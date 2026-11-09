@@ -8,6 +8,22 @@ use Carbon\CarbonInterface;
 class IntegrationSettings
 {
     /** @return array<string,mixed> */
+    public function techrise(): array
+    {
+        $configuration = config('services.techrise');
+        $saved = $this->approvedConfiguration();
+
+        foreach (['endpoint', 'client_id', 'api_key', 'sender_id'] as $key) {
+            $value = $saved['techrise_'.$key] ?? null;
+            if (filled($value)) {
+                $configuration[$key] = $value;
+            }
+        }
+
+        return $configuration;
+    }
+
+    /** @return array<string,mixed> */
     public function onfon(): array
     {
         $configuration = config('services.onfon');

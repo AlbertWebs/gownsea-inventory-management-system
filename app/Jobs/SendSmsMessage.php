@@ -39,8 +39,9 @@ class SendSmsMessage implements ShouldQueue
             return;
         }
 
-        $config = $settings->onfon();
-        if (blank($config['client_id']) || blank($config['api_key']) || blank($config['access_key']) || blank($config['sender_id'])) {
+        $isTechrise = $message->provider === 'techrise';
+        $config = $isTechrise ? $settings->techrise() : $settings->onfon();
+        if (blank($config['client_id']) || blank($config['api_key']) || blank($config['sender_id']) || (! $isTechrise && blank($config['access_key']))) {
             $message->update(['status' => 'failed', 'attempts' => $message->attempts + 1, 'provider_description' => 'SMS provider credentials are not configured.']);
 
             return;
@@ -48,25 +49,39 @@ class SendSmsMessage implements ShouldQueue
 
         $message->update(['status' => 'sending', 'attempts' => $message->attempts + 1]);
         try {
-            $response = Http::acceptJson()->asJson()->connectTimeout(5)->timeout(15)
-                ->withHeader('AccessKey', $config['access_key'])
-                ->post($config['endpoint'], [
-                    'SenderId' => $config['sender_id'],
-                    'IsUnicode' => preg_match('/[^\x00-\x7F]/u', $message->body) === 1,
-                    'IsFlash' => false,
-                    'MessageParameters' => [['Number' => $message->recipient, 'Text' => $message->body]],
-                    'ApiKey' => $config['api_key'],
-                    'ClientId' => $config['client_id'],
+            $request = Http::acceptJson()->asJson()->connectTimeout(5)->timeout(15);
+            if ($isTechrise) {
+                $response = $request->post($config['endpoint'], [
+                    'apiKey' => $config['api_key'],
+                    'clientId' => $config['client_id'],
+                    'senderId' => $config['sender_id'],
+                    'message' => $message->body,
+                    'mobile' => $this->techriseMobile($message->recipient),
                 ]);
+            } else {
+                $response = $request->withHeader('AccessKey', $config['access_key'])
+                    ->post($config['endpoint'], [
+                        'SenderId' => $config['sender_id'],
+                        'IsUnicode' => preg_match('/[^\x00-\x7F]/u', $message->body) === 1,
+                        'IsFlash' => false,
+                        'MessageParameters' => [['Number' => $message->recipient, 'Text' => $message->body]],
+                        'ApiKey' => $config['api_key'],
+                        'ClientId' => $config['client_id'],
+                    ]);
+            }
 
             $data = $response->json();
-            $success = $response->successful() && is_array($data) && (int) ($data['ErrorCode'] ?? -1) === 0;
-            $providerMessageId = data_get($data, 'Data.0.MessageId');
+            $success = $response->successful() && ($isTechrise || (is_array($data) && (int) ($data['ErrorCode'] ?? -1) === 0));
+            $providerMessageId = $isTechrise
+                ? (data_get($data, 'messageId') ?? data_get($data, 'data.messageId'))
+                : data_get($data, 'Data.0.MessageId');
             $message->update([
                 'status' => $success ? 'sent' : 'failed',
                 'provider_message_id' => is_string($providerMessageId) ? $providerMessageId : null,
                 'provider_code' => isset($data['ErrorCode']) ? (string) $data['ErrorCode'] : (string) $response->status(),
-                'provider_description' => mb_substr((string) ($data['ErrorDescription'] ?? 'SMS provider rejected the request.'), 0, 500),
+                'provider_description' => $success
+                    ? 'Accepted by SMS provider.'
+                    : mb_substr((string) ($data['ErrorDescription'] ?? $data['message'] ?? 'SMS provider rejected the request.'), 0, 500),
                 'sent_at' => $success ? now() : null,
             ]);
         } catch (ConnectionException|RequestException $exception) {
@@ -76,5 +91,16 @@ class SendSmsMessage implements ShouldQueue
             $message->update(['status' => 'failed', 'provider_description' => 'Unexpected SMS processing failure.']);
             report($exception);
         }
+    }
+
+    private function techriseMobile(string $recipient): string
+    {
+        $digits = preg_replace('/\D+/', '', $recipient) ?? '';
+
+        if (str_starts_with($digits, '0')) {
+            return '254'.substr($digits, 1);
+        }
+
+        return $digits;
     }
 }

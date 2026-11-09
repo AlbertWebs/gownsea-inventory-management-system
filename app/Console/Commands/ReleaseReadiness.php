@@ -63,7 +63,7 @@ class ReleaseReadiness extends Command
             : "Resolve {$unresolvedEtims} pending, failed, historical, or uncertain eTIMS submission(s)");
 
         $providers = $schemaReady ? (BusinessConfiguration::query()->where('configuration_key', 'provider_integrations')->where('review_status', 'approved')->latest('id')->first()?->configuration ?? []) : [];
-        $this->check('evidence', 'Onfon live delivery', filled($providers['onfon_test_reference'] ?? null) && filled($providers['onfon_tested_at'] ?? null), 'Use rotated GOWNSEA credentials and retain a real delivery receipt reference');
+        $this->check('evidence', 'Techrise live delivery', filled($providers['techrise_test_reference'] ?? null) && filled($providers['techrise_tested_at'] ?? null), 'Use approved GOWNSEA credentials and retain a real delivery receipt reference');
         $this->check('evidence', 'Daraja sandbox/callback', filled($providers['daraja_test_reference'] ?? null) && filled($providers['daraja_callback_reference'] ?? null), 'Complete a sandbox STK transaction and reconcile its callback');
         $this->check('evidence', 'Remote CI', false, 'Verify the PostgreSQL/Redis workflow on the remote CI runner');
         $this->check('evidence', 'Performance and devices', false, 'Record agreed load results and acceptance on GOWNSEA Android/scanner devices');
