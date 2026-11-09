@@ -47,10 +47,11 @@ Before deploying, record the current release for rollback and check the health e
 
 ```powershell
 $key = $env:GOWNSEA_EC2_KEY_PATH
-ssh.exe -i $key ubuntu@app.gownsea.com "sudo readlink -f /var/www/gownsea/current; curl -fsS https://app.gownsea.com/up"
+$server = $env:GOWNSEA_EC2_HOST
+ssh.exe -i $key "ubuntu@$server" "sudo readlink -f /var/www/gownsea/current; curl -fsS https://app.gownsea.com/up"
 ```
 
-Set `GOWNSEA_EC2_KEY_PATH` to the operator's PEM path in the local environment. Do not commit that key or write its contents into a command, log, or project document.
+Set `GOWNSEA_EC2_KEY_PATH` to the operator's PEM path and `GOWNSEA_EC2_HOST` to the EC2 SSH hostname or public IP in the local environment. Use the EC2 address directly if the app domain is behind a proxy. Do not commit the key or write its contents into a command, log, or project document.
 
 ## 4. Transfer and deploy
 
@@ -59,8 +60,8 @@ Transfer the archive to the Ubuntu operator account, extract it in a unique stag
 ```powershell
 $remoteArchive = "/home/ubuntu/gownsea-$releaseId.tar.gz"
 $remoteStage = "/home/ubuntu/gownsea-$releaseId"
-scp.exe -i $key $bundle "ubuntu@app.gownsea.com:$remoteArchive"
-ssh.exe -i $key ubuntu@app.gownsea.com "mkdir -p '$remoteStage' && tar -xzf '$remoteArchive' -C '$remoteStage' && sudo bash '$remoteStage/deploy/aws/ec2/deploy-release.sh' '$remoteStage' '$releaseId' && rm -rf '$remoteStage' '$remoteArchive'"
+scp.exe -i $key $bundle "ubuntu@${server}:$remoteArchive"
+ssh.exe -i $key "ubuntu@$server" "mkdir -p '$remoteStage' && tar -xzf '$remoteArchive' -C '$remoteStage' && sudo bash '$remoteStage/deploy/aws/ec2/deploy-release.sh' '$remoteStage' '$releaseId' && rm -rf '$remoteStage' '$remoteArchive'"
 ```
 
 The release script refuses a release ID already in use and requires the production environment file and `public/build/manifest.json`. It installs production dependencies, enters maintenance mode, applies migrations, warms Laravel caches, swaps `/var/www/gownsea/current`, brings the app up, restarts the GOWNSEA queue worker when installed, and reloads Nginx.
