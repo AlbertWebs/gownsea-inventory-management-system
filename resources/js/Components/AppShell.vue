@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
                 </button>
             </header>
 
-            <main class="page-content">
+            <main class="page-content" :class="{ 'dashboard-page-content': props.active === 'dashboard' }">
                 <div v-if="flash?.success" class="flash-message" role="status">{{ flash.success }}</div>
                 <div v-if="flash?.error" class="flash-message flash-error" role="alert">{{ flash.error }}</div>
                 <slot />

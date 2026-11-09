@@ -186,3 +186,11 @@ Vue components must have a single root element.
 - IMPORTANT: Activate `inertia-vue-development` when working with Inertia Vue client-side patterns.
 
 </laravel-boost-guidelines>
+
+=== project release workflow ===
+
+# Live GOWNSEA releases
+
+- For application changes intended for the live GOWNSEA site, the standard workflow is to commit and push to `main`, then deploy that pushed commit to the active EC2 release and verify the health endpoint. Follow `docs/RELEASE_PROCESS.md` unless the user asks for a different sequence or says not to deploy.
+- The active app shares its Ubuntu EC2 host with unrelated sites. Keep application deployments scoped to `/var/www/gownsea`; do not run host preparation scripts, alter shared host services beyond the release script, or apply infrastructure templates as part of an app release.
+- Build release artifacts from the pushed Git commit so ignored local files and credentials cannot enter the release. Never package `.env`, shared storage, PEM keys, or local dependency directories.
