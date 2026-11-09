@@ -302,6 +302,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     .priority-item:nth-child(3n) { border-bottom: 1px solid #eeeef0; }
     .location-filter { position: static; margin-top: 8px; }
 }
+@media (max-width: 1200px), (max-height: 850px) {
+    .sidebar-quote { display: none; }
+}
 @media (max-width: 1020px) {
     .sidebar { width: 77px; }
     .brand { height: 92px; flex-basis: 92px; padding: 12px 5px; }
