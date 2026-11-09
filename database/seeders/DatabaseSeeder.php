@@ -33,5 +33,9 @@ class DatabaseSeeder extends Seeder
             ['code' => 'CENTRAL-WH'],
             ['name' => 'Central Warehouse', 'type' => 'warehouse', 'timezone' => 'Africa/Nairobi', 'is_active' => true],
         );
+
+        if (app()->environment(['local', 'testing'])) {
+            $this->call(GownseaDemoSeeder::class);
+        }
     }
 }
