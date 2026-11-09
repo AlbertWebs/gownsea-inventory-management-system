@@ -4,7 +4,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
 import {
     Bell, Boxes, CalendarClock, ChartNoAxesCombined, ChevronDown, ChevronRight, ClipboardList,
-    KeyRound, Landmark, LayoutDashboard, LogOut, MapPinned, Menu, Search, Settings, UserRoundCog, UsersRound, WalletCards, X,
+    KeyRound, Landmark, LayoutDashboard, LogOut, MapPinned, Menu, Search, Settings, ShieldCheck, UserRoundCog, UsersRound, WalletCards, X,
 } from '@lucide/vue';
 
 type User = { id: number; name: string; email: string; role: string };
@@ -15,6 +15,8 @@ const page = usePage();
 const online = useOnlineStatus();
 const collapsed = ref(false);
 const mobileOpen = ref(false);
+const profileMenuOpen = ref(false);
+const profileMenuRoot = ref<HTMLElement | null>(null);
 const query = ref('');
 const results = ref<SearchResult[]>([]);
 const searching = ref(false);
@@ -26,6 +28,7 @@ type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Pro
 const user = computed(() => (page.props.auth as { user: User | null }).user);
 const flash = computed(() => page.props.flash as { success?: string; error?: string } | undefined);
 const initials = computed(() => (user.value?.name ?? 'GS').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase());
+const canManageWorkspace = computed(() => !!user.value && ['super_admin', 'management'].includes(user.value.role));
 
 const navigation = computed(() => [
     { label: 'Dashboard', href: '/', key: 'dashboard', icon: LayoutDashboard },
@@ -74,7 +77,20 @@ watch(query, (value) => {
 });
 
 function signOut(): void {
+    profileMenuOpen.value = false;
     router.delete('/logout');
+}
+
+function closeProfileMenu(): void {
+    profileMenuOpen.value = false;
+}
+
+function closeProfileMenuOnOutsideClick(event: PointerEvent): void {
+    if (!profileMenuRoot.value?.contains(event.target as Node)) closeProfileMenu();
+}
+
+function closeProfileMenuOnEscape(event: KeyboardEvent): void {
+    if (event.key === 'Escape') closeProfileMenu();
 }
 
 function toggleNavigation(): void {
@@ -104,11 +120,17 @@ async function installApp(): Promise<void> {
     installPrompt.value = null;
 }
 
-onMounted(() => window.addEventListener('beforeinstallprompt', rememberInstallPrompt));
+onMounted(() => {
+    window.addEventListener('beforeinstallprompt', rememberInstallPrompt);
+    document.addEventListener('pointerdown', closeProfileMenuOnOutsideClick);
+    document.addEventListener('keydown', closeProfileMenuOnEscape);
+});
 
 onBeforeUnmount(() => {
     if (searchTimer) clearTimeout(searchTimer);
     window.removeEventListener('beforeinstallprompt', rememberInstallPrompt);
+    document.removeEventListener('pointerdown', closeProfileMenuOnOutsideClick);
+    document.removeEventListener('keydown', closeProfileMenuOnEscape);
 });
 </script>
 
@@ -171,14 +193,47 @@ onBeforeUnmount(() => {
                     <span v-if="props.actionCount > 0" class="notification-badge">{{ props.actionCount > 99 ? '99+' : props.actionCount }}</span>
                 </Link>
                 <span class="topbar-divider" />
-                <Link class="profile-link" href="/account/security" :title="user?.email" aria-label="Open account security settings">
-                    <span class="avatar" aria-hidden="true">{{ initials }}</span>
-                    <span><span class="profile-name">{{ user?.name ?? 'GOWNSEA Staff' }}</span><span class="profile-role">{{ (user?.role ?? 'Staff').replaceAll('_', ' ') }}</span></span>
-                    <ChevronDown class="profile-chevron" aria-hidden="true" />
-                </Link>
-                <button class="icon-button sign-out-button" aria-label="Sign out" title="Sign out" @click="signOut">
-                    <LogOut aria-hidden="true" />
-                </button>
+                <div ref="profileMenuRoot" class="profile-menu-root">
+                    <button
+                        id="profile-menu-trigger"
+                        class="profile-trigger"
+                        type="button"
+                        aria-label="Open account menu"
+                        aria-controls="profile-menu-panel"
+                        :aria-expanded="profileMenuOpen"
+                        @click="profileMenuOpen = !profileMenuOpen"
+                    >
+                        <span class="avatar" aria-hidden="true">{{ initials }}</span>
+                        <span class="profile-copy"><span class="profile-name">{{ user?.name ?? 'GOWNSEA Staff' }}</span><span class="profile-role">{{ (user?.role ?? 'Staff').replaceAll('_', ' ') }}</span></span>
+                        <ChevronDown class="profile-chevron" aria-hidden="true" />
+                    </button>
+                    <div v-if="profileMenuOpen" id="profile-menu-panel" class="profile-dropdown" aria-labelledby="profile-menu-trigger">
+                        <div class="profile-identity">
+                            <span class="avatar profile-dropdown-avatar" aria-hidden="true">{{ initials }}</span>
+                            <span class="profile-identity-copy">
+                                <strong>{{ user?.name ?? 'GOWNSEA Staff' }}</strong>
+                                <span>{{ user?.email ?? 'Signed-in account' }}</span>
+                                <small>{{ (user?.role ?? 'Staff').replaceAll('_', ' ') }}</small>
+                            </span>
+                        </div>
+                        <div class="profile-dropdown-divider" />
+                        <Link class="profile-dropdown-link" href="/account/security" @click="closeProfileMenu">
+                            <ShieldCheck aria-hidden="true" /><span>Account security</span><ChevronRight aria-hidden="true" />
+                        </Link>
+                        <template v-if="canManageWorkspace">
+                            <Link class="profile-dropdown-link" href="/roles-permissions" @click="closeProfileMenu">
+                                <KeyRound aria-hidden="true" /><span>Roles &amp; permissions</span><ChevronRight aria-hidden="true" />
+                            </Link>
+                            <Link class="profile-dropdown-link" href="/settings" @click="closeProfileMenu">
+                                <Settings aria-hidden="true" /><span>Workspace settings</span><ChevronRight aria-hidden="true" />
+                            </Link>
+                        </template>
+                        <div class="profile-dropdown-divider" />
+                        <button class="profile-dropdown-signout" type="button" @click="signOut">
+                            <LogOut aria-hidden="true" /><span>Sign out</span>
+                        </button>
+                    </div>
+                </div>
             </header>
 
             <main class="page-content" :class="{ 'dashboard-page-content': props.active === 'dashboard' }">
