@@ -18,11 +18,13 @@ class GownseaDemoSeeder extends Seeder
 {
     public function run(): void
     {
-        if (! app()->environment(['local', 'testing'])) {
-            throw new LogicException('GownseaDemoSeeder is restricted to local and testing environments.');
+        $isLocalOrTesting = app()->environment(['local', 'testing']);
+        $isExplicitProductionRun = $this->command?->option('force') === true;
+        if (! $isLocalOrTesting && ! $isExplicitProductionRun) {
+            throw new LogicException('Outside local/testing, run this demo seeder only with the explicit --force option.');
         }
 
-        DB::transaction(function (): void {
+        DB::transaction(function () use ($isLocalOrTesting): void {
             $now = now();
             $classificationIds = [];
             foreach ([
@@ -44,22 +46,34 @@ class GownseaDemoSeeder extends Seeder
                 ['name' => 'Demo Production Officer', 'email' => 'demo.production@gownsea.test', 'role' => 'production'],
             ];
             $users = [];
-            foreach ($roles as $staff) {
-                $users[$staff['role']] = User::query()->updateOrCreate(
-                    ['email' => $staff['email']],
-                    ['name' => $staff['name'], 'password' => Hash::make('GownseaDemo2026!'), 'role' => $staff['role'], 'is_active' => true, 'email_verified_at' => $now],
-                );
+            if ($isLocalOrTesting) {
+                foreach ($roles as $staff) {
+                    $users[$staff['role']] = User::query()->updateOrCreate(
+                        ['email' => $staff['email']],
+                        ['name' => $staff['name'], 'password' => Hash::make('GownseaDemo2026!'), 'role' => $staff['role'], 'is_active' => true, 'email_verified_at' => $now],
+                    );
+                }
+            } else {
+                $operator = User::query()->where('is_active', true)
+                    ->orderByRaw("CASE WHEN role = 'super_admin' THEN 0 WHEN role = 'management' THEN 1 ELSE 2 END")
+                    ->first();
+                if ($operator === null) {
+                    throw new LogicException('Production demo seeding requires an active existing user.');
+                }
+                $users = array_fill_keys(array_column($roles, 'role'), $operator);
             }
 
             $warehouse = Location::query()->updateOrCreate(['code' => 'DEMO-WH'], ['name' => 'Demo Central Warehouse', 'type' => 'warehouse', 'address' => 'Valji Building, Moktar Daddah Street, Nairobi', 'phone' => '+254728311537', 'timezone' => 'Africa/Nairobi', 'manager_id' => $users['super_admin']->id, 'is_active' => true]);
             $nairobi = Location::query()->updateOrCreate(['code' => 'DEMO-NAIROBI'], ['name' => 'Demo Nairobi Branch', 'type' => 'branch', 'address' => 'Nairobi CBD', 'phone' => '+254728311537', 'timezone' => 'Africa/Nairobi', 'manager_id' => $users['storekeeper']->id, 'is_active' => true]);
             $mombasa = Location::query()->updateOrCreate(['code' => 'DEMO-MOMBASA'], ['name' => 'Demo Mombasa Branch', 'type' => 'branch', 'address' => 'Mombasa', 'phone' => '+254728311537', 'timezone' => 'Africa/Nairobi', 'manager_id' => $users['storekeeper']->id, 'is_active' => true]);
-            foreach ($users as $user) {
-                $user->locations()->syncWithoutDetaching([
-                    $warehouse->id => ['is_primary' => $user->role === 'super_admin'],
-                    $nairobi->id => ['is_primary' => $user->role !== 'super_admin'],
-                    $mombasa->id => ['is_primary' => false],
-                ]);
+            if ($isLocalOrTesting) {
+                foreach ($users as $user) {
+                    $user->locations()->syncWithoutDetaching([
+                        $warehouse->id => ['is_primary' => $user->role === 'super_admin'],
+                        $nairobi->id => ['is_primary' => $user->role !== 'super_admin'],
+                        $mombasa->id => ['is_primary' => false],
+                    ]);
+                }
             }
 
             $institutions = [];
