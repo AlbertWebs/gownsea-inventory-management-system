@@ -1,0 +1,18 @@
+[Unit]
+Description=Run the GOWNSEA Laravel scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/gownsea/current
+EnvironmentFile=/var/www/gownsea/shared/.env
+ExecStart=/usr/bin/php artisan schedule:run --no-interaction
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/gownsea/shared/storage /var/lib/gownsea/backups

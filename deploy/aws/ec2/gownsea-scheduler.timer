@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the GOWNSEA Laravel scheduler every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+Persistent=true
+Unit=gownsea-scheduler.service
+
+[Install]
+WantedBy=timers.target

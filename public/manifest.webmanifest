@@ -1,0 +1,29 @@
+{
+  "name": "GOWNSEA Operations",
+  "short_name": "GOWNSEA",
+  "description": "GOWNSEA graduation wear inventory and operations.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f5",
+  "theme_color": "#17191d",
+  "icons": [
+    {
+      "src": "/images/brand/gownsea-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/brand/gownsea-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/brand/gownsea-app-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

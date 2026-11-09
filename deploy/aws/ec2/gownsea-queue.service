@@ -1,0 +1,25 @@
+[Unit]
+Description=GOWNSEA Laravel queue worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/gownsea/current
+EnvironmentFile=/var/www/gownsea/shared/.env
+ExecStart=/usr/bin/php artisan queue:work --sleep=3 --tries=3 --timeout=120 --max-time=3600 --no-interaction
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=120
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/gownsea/shared/storage /var/lib/gownsea/backups
+
+[Install]
+WantedBy=multi-user.target

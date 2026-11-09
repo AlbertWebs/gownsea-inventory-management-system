@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Private versioned GOWNSEA backup bucket and EC2 instance role. No access keys are created.
+
+Parameters:
+  BackupBucketName:
+    Type: String
+    Description: Globally unique S3 bucket name for encrypted GOWNSEA backup archives.
+    MinLength: 3
+    MaxLength: 63
+    AllowedPattern: '[a-z0-9][a-z0-9.-]*[a-z0-9]'
+  BackupPrefix:
+    Type: String
+    Default: gownsea-backups
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: '[A-Za-z0-9][A-Za-z0-9/-]*[A-Za-z0-9]'
+    Description: Object prefix used by GOWNSEA_BACKUP_EXTERNAL_PREFIX.
+  CurrentBackupRetentionDays:
+    Type: Number
+    Default: 90
+    MinValue: 30
+    MaxValue: 3650
+    Description: Number of days to retain current backup archives in S3.
+  PreviousVersionRetentionDays:
+    Type: Number
+    Default: 90
+    MinValue: 30
+    MaxValue: 3650
+    Description: Number of days to retain noncurrent versions before lifecycle deletion.
+
+Resources:
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref BackupBucketName
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireCurrentBackupArchives
+            Status: Enabled
+            Prefix: !Sub '${BackupPrefix}/'
+            ExpirationInDays: !Ref CurrentBackupRetentionDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref PreviousVersionRetentionDays
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  BackupBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BackupBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt BackupBucket.Arn
+              - !Sub '${BackupBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  GownseaEc2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Runtime role for the GOWNSEA EC2 application host; use temporary instance-profile credentials.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: GownseaEncryptedBackupObjects
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: WriteAndRestoreBackupsOnly
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub '${BackupBucket.Arn}/${BackupPrefix}/*'
+        - PolicyName: GownseaSesEmailSending
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SendGownseaMailOnly
+                Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/gownsea.com'
+
+  GownseaEc2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref GownseaEc2Role
+
+Outputs:
+  BackupBucketName:
+    Description: Set as AWS_BUCKET.
+    Value: !Ref BackupBucket
+  BackupBucketRegion:
+    Description: Set as AWS_DEFAULT_REGION; enable this region in the AWS account before deployment.
+    Value: !Ref AWS::Region
+  BackupPrefix:
+    Description: Set as GOWNSEA_BACKUP_EXTERNAL_PREFIX.
+    Value: !Ref BackupPrefix
+  Ec2InstanceProfileName:
+    Description: Attach this instance profile to the GOWNSEA EC2 host.
+    Value: !Ref GownseaEc2InstanceProfile
