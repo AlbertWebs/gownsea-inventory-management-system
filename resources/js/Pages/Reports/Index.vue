@@ -76,41 +76,62 @@ function exportUrl(slug: string, format: 'csv' | 'pdf'): string {
 
 <style scoped>
 .report-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 13px; }
-.report-metric { display: flex; min-height: 86px; flex-direction: column; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+.report-metric { position:relative; display: flex; min-height: 92px; flex-direction: column; justify-content: space-between; gap: 12px; overflow:hidden; border-color:#e6e9ef; border-top:3px solid #5b8def; padding: 13px 16px; background:linear-gradient(145deg,#f4f8ff,#fff 72%); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.report-metric:nth-child(2) { border-top-color:#24a36a; background:linear-gradient(145deg,#f1fbf5,#fff 72%); }
+.report-metric:nth-child(3) { border-top-color:#8b63cc; background:linear-gradient(145deg,#f7f3ff,#fff 72%); }
+.report-metric:nth-child(4) { border-top-color:#d9434e; background:linear-gradient(145deg,#fff3f3,#fff 72%); }
+.report-metric:nth-child(5) { border-top-color:#d89a2b; background:linear-gradient(145deg,#fff9ed,#fff 72%); }
+.report-metric:nth-child(6) { border-top-color:#159b9b; background:linear-gradient(145deg,#effafa,#fff 72%); }
+.report-metric:nth-child(7) { border-top-color:#6477cf; background:linear-gradient(145deg,#f2f4ff,#fff 72%); }
 .reconciliation-panel { margin-bottom: 13px; padding: 17px; }
 .recon-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
-.recon-grid article { display: flex; min-height: 96px; flex-direction: column; gap: 8px; border: 1px solid #eef0f1; border-radius: 7px; padding: 11px; }
+.recon-grid article { display: flex; min-height: 100px; flex-direction: column; gap: 8px; border: 1px solid #e8ebf0; border-left:3px solid #4b85d8; border-radius: 8px; padding: 12px; background:linear-gradient(145deg,#f5f8fd,#fff 75%); transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.recon-grid article:nth-child(3n + 2) { border-left-color:#26a269; background:linear-gradient(145deg,#f3faf5,#fff 75%); }
+.recon-grid article:nth-child(3n) { border-left-color:#8c65c7; background:linear-gradient(145deg,#f8f5fc,#fff 75%); }
 .recon-grid article span, .recon-controls > span { color: #606874; font-size: 10px; }
 .recon-grid article strong { color: #202633; font-size: 17px; }
 .recon-grid article small, .recon-controls small { color: #606874; font-size: 9px; line-height: 1.4; }
-.recon-grid .recon-result { background: #fff7f0; border-color: #f1ddc9; }
+.recon-grid .recon-result { background:linear-gradient(145deg,#fff5e8,#fff 78%); border-color:#f1ddc9; border-left-color:#e2982d; box-shadow:inset 0 0 0 1px #f8ead4; }
 .recon-subhead { margin: 17px 0 7px; color: #303743; font-size: 11px; }
 .recon-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
 .recon-controls > span { display: flex; flex-direction: column; gap: 5px; }
 .recon-controls strong { color: #202633; font-size: 14px; }
-.report-metric span { color: #606874; font-size: 10px; }
-.report-metric strong { color: #171c27; font-size: 20px; }
+.report-metric span { color: #566174; font-size: 11px; font-weight:650; }
+.report-metric strong { color: #263a5a; font-size: 22px; letter-spacing:-.02em; }
 .alert-metric strong { color: #d42127; }
 .report-layout { display: grid; grid-template-columns: 1.3fr .8fr; gap: 12px; }
 .report-list-panel, .report-status-panel { padding: 17px; }
 .report-heading { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
 .report-heading label { display: grid; gap: 4px; color: #606874; font-size: 10px; }
 .report-heading input, .report-heading select { border: 1px solid #e4e6e9; border-radius: 6px; padding: 6px 8px; color: #343a46; font: inherit; }
-.report-link { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #eef0f1; padding: 14px 2px; }
-.report-link:last-child { border-bottom: 0; }
-.report-link:hover .report-copy strong { color: #d42127; }
+.report-link { display: flex; align-items: center; gap: 12px; margin-top: 8px; border: 1px solid #e9ebef; border-radius: 9px; background: #fff; padding: 13px 12px; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background-color .18s ease; }
+.report-heading + .report-link { margin-top: 14px; }
+.report-link:hover, .report-link:focus-within { transform: translateY(-2px); border-color: #e5aeb2; background: #fffdfd; box-shadow: 0 7px 18px #17203312; }
+.report-link:hover .report-copy strong, .report-link:focus-within .report-copy strong { color: #d42127; }
 .report-link > svg { width: 16px; color: #606874; }
-.report-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 50%; background: #fff0f0; color: #d42127; }
+.report-icon { display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; border:1px solid #dce8fa; border-radius: 12px; background: #eef5ff; color: #3975c8; transition:transform .18s ease,background-color .18s ease; }
+.report-link:nth-of-type(3n + 1) .report-icon { border-color:#dcefe2; background:#eff9f2; color:#27834f; }
+.report-link:nth-of-type(3n + 2) .report-icon { border-color:#f0e3ce; background:#fff8eb; color:#a66a12; }
+.report-link:nth-of-type(3n) .report-icon { border-color:#e8def6; background:#f6f1fc; color:#7952b2; }
+.report-link:hover .report-icon,.report-link:focus-within .report-icon { transform:scale(1.06); }
 .report-icon svg { width: 19px; }
 .report-copy { flex: 1; }
 .report-copy strong { display: block; color: #262c38; font-size: 11px; }
 .report-copy small { display: block; margin-top: 4px; color: #606874; font-size: 10px; }
-.export-link { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; color: #c91f2a; font-size: 10px; font-weight: 700; }
+.export-link { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding:7px 9px; border:1px solid #e8d5d7; border-radius:7px; background:#fff6f6; color: #b72430; font-size: 11px; font-weight: 700; text-decoration:none; transition:background-color .16s ease,border-color .16s ease,transform .16s ease; }
+.export-link.csv-export { border-color:#d5e5dd; background:#f1f9f4; color:#24764a; }
+.export-link:hover { transform:translateY(-1px); border-color:#d88f95; background:#ffeded; }
+.export-link.csv-export:hover { border-color:#8cc5a3; background:#e6f5eb; }
 .export-link svg { width: 14px; }
 .status-report-list { margin-top: 16px; }
-.status-report-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #eff0f1; padding: 11px 0; color: #606874; font-size: 11px; text-transform: capitalize; }
-.status-report-row strong { color: #202633; }
+.status-report-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #eff0f1; border-radius: 5px; padding: 11px 8px; color: #606874; font-size: 11px; text-transform: capitalize; transition: background-color .16s ease, color .16s ease; }
+.status-report-row:hover { background: #f1f6fd; color: #252b36; }
+.status-report-row strong { min-width:38px; border-radius:999px; padding:3px 8px; background:#eef3fa; color:#315c94; text-align:center; }
 .compact-empty { min-height: 140px; }
 .report-note { margin: 13px 0 0; color: #606874; font-size: 10px; line-height: 1.5; }
+.report-metric:hover, .report-metric:focus-within, .recon-grid article:hover { transform: translateY(-2px); border-color: #e5aeb2; box-shadow: 0 7px 18px #17203312; }
+.report-link:focus-within { outline: 2px solid #d4212740; outline-offset: 2px; }
+.export-link:focus-visible { outline: 2px solid #d42127; outline-offset: 3px; border-radius: 3px; }
+@media(prefers-reduced-motion:reduce) { .report-metric,.recon-grid article,.report-link,.status-report-row { transition: none; } .report-metric:hover,.report-metric:focus-within,.recon-grid article:hover,.report-link:hover,.report-link:focus-within { transform: none; } }
 @media(max-width:700px) { .report-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; } .report-layout { grid-template-columns: 1fr; gap: 9px; } .recon-grid,.recon-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

@@ -26,6 +26,7 @@ use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TransferController;
+use App\Http\Controllers\UserManualController;
 use App\Http\Controllers\VendorBillController;
 use Illuminate\Support\Facades\Route;
 
@@ -49,8 +50,12 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::delete('/account/security/sessions', [AccountSecurityController::class, 'destroyOtherSessions'])->middleware('throttle:5,1')->name('account.security.sessions.destroy');
     Route::get('/', DashboardController::class)->middleware('permission:dashboard.view')->name('dashboard');
     Route::get('/search', SearchController::class)->middleware(['throttle:60,1', 'permission:search.use'])->name('search');
+    Route::get('/user-manual', UserManualController::class)->name('user-manual');
+    Route::get('/user-manual/download', [UserManualController::class, 'download'])->name('user-manual.download');
 
     Route::get('/inventory', [InventoryController::class, 'index'])->middleware('permission:inventory.view')->name('inventory.index');
+    Route::get('/inventory/bulk-stock', [InventoryController::class, 'index'])->middleware('permission:inventory.view')->name('inventory.bulk-stock');
+    Route::get('/inventory/cycle-counts', [InventoryController::class, 'index'])->middleware('permission:inventory.view')->name('inventory.cycle-counts');
     Route::get('/inventory/create', [ProductController::class, 'create'])->middleware('permission:inventory.catalog.manage')->name('inventory.create');
     Route::get('/products/{product}/image', [ProductController::class, 'image'])->whereNumber('product')->middleware('permission:inventory.view')->name('products.image');
     Route::get('/inventory/labels', [InventoryController::class, 'labels'])->middleware('permission:inventory.view')->name('inventory.labels');
@@ -70,6 +75,8 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/inventory/{asset}/inspect', [InventoryController::class, 'inspect'])->middleware('permission:inventory.stock.receive')->name('inventory.inspect');
     Route::post('/inventory/{asset}/write-off', [InventoryController::class, 'writeOff'])->middleware(['throttle:20,1', 'permission:inventory.stock.adjust'])->name('inventory.write-off');
     Route::get('/hiring', [HireController::class, 'index'])->middleware('permission:hiring.view')->name('hiring.index');
+    Route::get('/hiring/customers/search', [HireController::class, 'searchCustomers'])->middleware('permission:hiring.issue')->name('hiring.customers.search');
+    Route::get('/hiring/assets/availability', [HireController::class, 'checkAssetAvailability'])->middleware('permission:hiring.issue')->name('hiring.assets.availability');
     Route::get('/hiring/issue', [HireController::class, 'create'])->middleware('permission:hiring.issue')->name('hiring.issue');
     Route::post('/hiring/issue', [HireController::class, 'store'])->middleware(['throttle:30,1', 'permission:hiring.issue'])->name('hiring.issue.store');
     Route::get('/hiring/reservations/create', [HireReservationController::class, 'create'])->middleware('permission:hiring.issue')->name('hiring.reservations.create');
@@ -88,6 +95,7 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::get('/crm', [LeadController::class, 'index'])->middleware('permission:crm.manage')->name('crm.index');
     Route::post('/crm/leads', [LeadController::class, 'store'])->middleware(['throttle:30,1', 'permission:crm.manage'])->name('crm.leads.store');
     Route::patch('/crm/leads/{lead}', [LeadController::class, 'update'])->middleware(['throttle:30,1', 'permission:crm.manage'])->name('crm.leads.update');
+    Route::patch('/crm/leads/{lead}/stage', [LeadController::class, 'moveStage'])->middleware(['throttle:30,1', 'permission:crm.manage'])->name('crm.leads.stage');
     Route::post('/crm/leads/{lead}/activities', [LeadController::class, 'activity'])->middleware(['throttle:30,1', 'permission:crm.manage'])->name('crm.leads.activities.store');
     Route::post('/crm/leads/{lead}/tasks', [LeadController::class, 'storeTask'])->middleware(['throttle:30,1', 'permission:crm.manage'])->name('crm.leads.tasks.store');
     Route::post('/crm/leads/{lead}/tasks/{task}/complete', [LeadController::class, 'completeTask'])->middleware(['throttle:30,1', 'permission:crm.manage'])->name('crm.leads.tasks.complete');
@@ -102,6 +110,7 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/quotations/{quotation}/convert-to-bulk-hire', [QuotationController::class, 'convertToBulkHire'])->middleware(['throttle:10,1', 'permission:hiring.issue'])->name('quotations.convert-to-bulk-hire');
     Route::post('/quotations/{quotation}/convert-to-serialized-hire', [QuotationController::class, 'convertToSerializedHire'])->middleware(['throttle:10,1', 'permission:hiring.issue'])->name('quotations.convert-to-serialized-hire');
     Route::post('/quotations/{quotation}/convert-to-bulk-sale', [QuotationController::class, 'convertToBulkSale'])->middleware(['throttle:10,1', 'permission:sales.record'])->name('quotations.convert-to-bulk-sale');
+    Route::get('/custom-orders/create', [CustomOrderController::class, 'index'])->middleware('permission:orders.manage')->name('custom-orders.create');
     Route::get('/custom-orders', [CustomOrderController::class, 'index'])->middleware('permission:orders.view')->name('custom-orders.index');
     Route::post('/custom-orders', [CustomOrderController::class, 'store'])->middleware(['throttle:20,1', 'permission:orders.manage'])->name('custom-orders.store');
     Route::patch('/custom-orders/{customOrder}', [CustomOrderController::class, 'update'])->middleware(['throttle:30,1', 'permission:orders.manage'])->name('custom-orders.update');
@@ -112,6 +121,10 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/custom-orders/{customOrder}/shipment-events', [CustomOrderController::class, 'storeShipmentEvent'])->middleware(['throttle:30,1', 'permission:orders.manage'])->name('custom-orders.shipment-events.store');
     Route::post('/custom-orders/{customOrder}/costs', [CustomOrderController::class, 'storeCost'])->middleware(['throttle:30,1', 'permission:orders.manage'])->name('custom-orders.costs.store');
     Route::get('/payments', [PaymentController::class, 'index'])->middleware('permission:sales.view')->name('payments.index');
+    Route::get('/payments/receipts/export', [PaymentController::class, 'exportReceipts'])->middleware('permission:sales.view')->name('payments.receipts.export');
+    Route::get('/payments/receipts/{payment}/download', [PaymentController::class, 'downloadReceipt'])->middleware('permission:sales.view')->name('payments.receipts.download');
+    Route::get('/payments/receipts/{payment}/thermal', [PaymentController::class, 'downloadThermalReceipt'])->middleware('permission:sales.view')->name('payments.receipts.thermal');
+    Route::get('/payments/{section}', [PaymentController::class, 'index'])->whereIn('section', ['receipts', 'deposits', 'penalties', 'expenses'])->middleware('permission:sales.view')->name('payments.section');
     Route::post('/payments', [PaymentController::class, 'store'])->middleware(['throttle:30,1', 'permission:sales.record'])->name('payments.store');
     Route::post('/payments/mpesa/stk', [PaymentController::class, 'startMpesa'])->middleware(['throttle:10,1', 'permission:sales.record'])->name('payments.mpesa.stk');
     Route::post('/payments/mpesa/stk/{push}/reconcile', [PaymentController::class, 'reconcileMpesa'])->middleware(['throttle:10,1', 'permission:finance.manage'])->name('payments.mpesa.stk.reconcile');

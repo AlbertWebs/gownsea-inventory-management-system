@@ -31,6 +31,10 @@ class SaveBusinessConfigurationRequest extends FormRequest
                 'legal_name' => ['nullable', 'string', 'max:255'],
                 'trading_name' => ['nullable', 'string', 'max:255'],
                 'registered_address' => ['nullable', 'string', 'max:1000'],
+                'receipt_phone' => ['nullable', 'string', 'max:32'],
+                'receipt_email' => ['nullable', 'email', 'max:255'],
+                'receipt_website' => ['nullable', 'url', 'max:255'],
+                'receipt_footer' => ['nullable', 'string', 'max:500'],
                 'kra_pin' => ['nullable', 'string', 'max:64'],
             ],
             'tax-setup' => [

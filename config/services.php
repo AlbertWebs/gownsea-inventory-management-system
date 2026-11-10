@@ -43,6 +43,10 @@ return [
         'sender_id' => env('ONFON_SMS_SENDER_ID', 'GOWNSEA'),
     ],
 
+    'sms' => [
+        'provider' => env('SMS_PROVIDER', 'techrise'),
+    ],
+
     'techrise' => [
         'endpoint' => env('TECHRISE_SMS_ENDPOINT', 'https://api.techrisesms.co.ke/v1/sms/send'),
         'client_id' => env('TECHRISE_SMS_CLIENT_ID'),

@@ -44,6 +44,7 @@ use App\Models\PenaltyAdjustment;
 use App\Models\PenaltyWaiverRequest;
 use App\Services\HirePenaltyBalance;
 use App\Services\IntegrationSettings;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -144,6 +145,98 @@ class PaymentController extends Controller
         return back()->with('success', "Journal reversal {$reversal->reference} recorded.");
     }
 
+    public function exportReceipts(Request $request): StreamedResponse
+    {
+        $user = $request->user();
+        abort_unless($user->can('viewAny', Payment::class), 403);
+        $locationIds = $user->mayViewAllLocations() ? null : $user->locations()->pluck('locations.id')->all();
+        $payments = Payment::query()->with(['customer:id,name', 'hire:id,reference', 'customOrder:id,reference', 'bulkSale:id,reference'])
+            ->withSum('refunds as refunded_minor', 'amount_minor')
+            ->where('status', 'received')
+            ->when($locationIds !== null, fn ($query) => $query->whereIn('location_id', $locationIds))
+            ->orderBy('id');
+
+        return response()->streamDownload(function () use ($payments): void {
+            $output = fopen('php://output', 'w');
+            if ($output === false) {
+                return;
+            }
+
+            fputcsv($output, ['Receipt', 'Customer', 'Hire / order reference', 'Received at', 'Method', 'Purpose', 'Gross (KES)', 'Refunded (KES)', 'Net (KES)', 'Currency', 'Provider reference']);
+            $grossTotal = 0;
+            $refundTotal = 0;
+            $netTotal = 0;
+            $safe = static function (?string $value): string {
+                $value ??= '';
+
+                return preg_match('/^[\s]*[=+@-]/u', $value) ? "'".$value : $value;
+            };
+            $payments->chunkById(500, function ($batch) use ($output, &$grossTotal, &$refundTotal, &$netTotal, $safe): void {
+                foreach ($batch as $payment) {
+                    $gross = (int) $payment->amount_minor;
+                    $refunded = (int) ($payment->refunded_minor ?? 0);
+                    $net = $gross - $refunded;
+                    $grossTotal += $gross;
+                    $refundTotal += $refunded;
+                    $netTotal += $net;
+                    $relatedReference = $payment->hire?->reference ?? $payment->customOrder?->reference ?? $payment->bulkSale?->reference ?? '';
+                    fputcsv($output, [
+                        $safe($payment->reference), $safe($payment->customer?->name), $safe($relatedReference),
+                        $payment->received_at?->toDateTimeString() ?? '', $safe($payment->method), $safe($payment->purpose),
+                        number_format($gross / 100, 2, '.', ''), number_format($refunded / 100, 2, '.', ''),
+                        number_format($net / 100, 2, '.', ''), $safe($payment->currency), $safe($payment->provider_reference),
+                    ]);
+                }
+            }, 'id');
+            fputcsv($output, ['TOTAL', '', '', '', '', '', number_format($grossTotal / 100, 2, '.', ''), number_format($refundTotal / 100, 2, '.', ''), number_format($netTotal / 100, 2, '.', ''), '', '']);
+            fclose($output);
+        }, 'gownsea-receipts-'.now()->format('Y-m-d').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    public function downloadReceipt(Request $request, Payment $payment): StreamedResponse
+    {
+        return $this->streamPaymentReceipt($request, $payment, false);
+    }
+
+    public function downloadThermalReceipt(Request $request, Payment $payment): StreamedResponse
+    {
+        return $this->streamPaymentReceipt($request, $payment, true);
+    }
+
+    private function streamPaymentReceipt(Request $request, Payment $payment, bool $thermal): StreamedResponse
+    {
+        $user = $request->user();
+        abort_unless($user->can('viewAny', Payment::class), 403);
+        abort_unless($payment->status === 'received', 404);
+        abort_unless($user->mayViewAllLocations() || $user->locations()->whereKey($payment->location_id)->exists(), 404);
+
+        $payment->load(['customer:id,name,phone,email', 'hire:id,reference', 'customOrder:id,reference', 'bulkSale:id,reference']);
+        $payment->loadSum('refunds', 'amount_minor');
+        $profile = BusinessConfiguration::query()->where('configuration_key', 'business_profile')->where('review_status', 'approved')
+            ->where(fn ($query) => $query->whereNull('effective_from')->orWhereDate('effective_from', '<=', $payment->received_at->toDateString()))
+            ->orderByDesc('effective_from')->orderByDesc('id')->first()?->configuration ?? [];
+        $location = Location::query()->find($payment->location_id);
+        $relatedReference = $payment->hire?->reference ?? $payment->customOrder?->reference ?? $payment->bulkSale?->reference;
+        $view = $thermal ? 'payments.thermal-receipt' : 'payments.receipt';
+        $pdf = Pdf::setOption(['isRemoteEnabled' => false, 'isPhpEnabled' => false, 'isJavascriptEnabled' => false])
+            ->loadView($view, [
+                'payment' => $payment,
+                'businessProfile' => $profile,
+                'locationName' => $location?->name,
+                'locationAddress' => $location?->address,
+                'locationPhone' => $location?->phone,
+                'relatedReference' => $relatedReference,
+                'refundedMinor' => (int) ($payment->refunds_sum_amount_minor ?? 0),
+            ]);
+        $pdf->setPaper($thermal ? [0, 0, 226.77, 510] : 'a5', $thermal ? 'portrait' : 'landscape');
+
+        return response()->streamDownload(
+            fn (): int|false => print $pdf->output(),
+            $payment->reference.($thermal ? '-thermal-receipt.pdf' : '-receipt.pdf'),
+            ['Content-Type' => 'application/pdf'],
+        );
+    }
+
     public function index(Request $request, HirePenaltyBalance $penaltyBalance): Response
     {
         $user = $request->user();
@@ -174,6 +267,7 @@ class PaymentController extends Controller
             ->whereIn('status', ['reserved', 'issued', 'partially_returned', 'returned_pending_inspection', 'completed'])
             ->when($locationIds !== null, fn ($query) => $query->whereIn('location_id', $locationIds))
             ->select(['id', 'reference', 'customer_id', 'location_id', 'status', 'deposit_minor'])
+            ->withExists('invoice')
             ->selectSub(HireItem::query()->selectRaw('COALESCE(SUM(quantity * unit_rate_minor), 0)')->whereColumn('hire_id', 'hires.id'), 'charge_total_minor')
             ->selectSub(Payment::query()->selectRaw('COALESCE(SUM(amount_minor - COALESCE((SELECT SUM(payment_refunds.amount_minor) FROM payment_refunds WHERE payment_refunds.payment_id = payments.id), 0)), 0)')->whereColumn('hire_id', 'hires.id')->where('status', 'received')->where('purpose', 'service_charge'), 'charge_paid_minor')
             ->selectSub(HireDepositApplication::query()->selectRaw('COALESCE(SUM(amount_minor), 0)')->whereColumn('hire_id', 'hires.id'), 'deposit_applied_minor')
@@ -186,6 +280,7 @@ class PaymentController extends Controller
                 'reference' => $hire->reference,
                 'customer' => $hire->customer->name,
                 'status' => $hire->status,
+                'hasInvoice' => (bool) $hire->invoice_exists,
                 'chargeTotalMinor' => (int) $hire->charge_total_minor,
                 'chargePaidMinor' => (int) $hire->charge_paid_minor + (int) $hire->deposit_applied_minor,
                 'penaltyTotalMinor' => max(0, (int) $hire->penalty_total_minor + (int) $accruedPenaltiesByHire->get($hire->id, 0) - (int) $hire->penalty_waived_minor),
@@ -196,11 +291,13 @@ class PaymentController extends Controller
         $customOrders = $canRecord ? CustomOrder::query()->with('customer:id,name')->where('status', '!=', 'cancelled')
             ->when($locationIds !== null, fn ($query) => $query->whereIn('location_id', $locationIds))
             ->select(['id', 'reference', 'customer_id', 'location_id', 'status', 'agreed_total_minor', 'deposit_required_minor'])
+            ->withExists('invoice')
             ->selectSub(Payment::query()->selectRaw('COALESCE(SUM(amount_minor - COALESCE((SELECT SUM(payment_refunds.amount_minor) FROM payment_refunds WHERE payment_refunds.payment_id = payments.id), 0)), 0)')->whereColumn('custom_order_id', 'custom_orders.id')->where('status', 'received')->where('purpose', 'custom_order_charge'), 'charge_paid_minor')
             ->selectSub(CustomOrderDepositApplication::query()->selectRaw('COALESCE(SUM(amount_minor), 0)')->whereColumn('custom_order_id', 'custom_orders.id'), 'deposit_applied_minor')
             ->selectSub(Payment::query()->selectRaw('COALESCE(SUM(amount_minor - COALESCE((SELECT SUM(payment_refunds.amount_minor) FROM payment_refunds WHERE payment_refunds.payment_id = payments.id), 0)), 0)')->whereColumn('custom_order_id', 'custom_orders.id')->where('status', 'received')->where('purpose', 'custom_order_deposit'), 'deposit_paid_minor')
             ->latest('created_at')->limit(100)->get()->map(fn (CustomOrder $order): array => [
                 'id' => $order->id, 'reference' => $order->reference, 'customer' => $order->customer->name, 'status' => $order->status,
+                'hasInvoice' => (bool) $order->invoice_exists,
                 'chargeTotalMinor' => $order->agreed_total_minor, 'chargePaidMinor' => (int) $order->charge_paid_minor + (int) $order->deposit_applied_minor,
                 'depositRequiredMinor' => $order->deposit_required_minor, 'depositPaidMinor' => (int) $order->deposit_paid_minor,
             ]) : collect();
@@ -302,6 +399,7 @@ class PaymentController extends Controller
             : collect();
 
         return Inertia::render('Finance/Payments', [
+            'section' => $request->routeIs('finance.index') ? 'finance' : (in_array($request->route('section'), ['receipts', 'deposits', 'penalties', 'expenses'], true) ? $request->route('section') : 'overview'),
             'payments' => $payments,
             'hires' => $hires,
             'customOrders' => $customOrders,

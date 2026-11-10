@@ -43,7 +43,7 @@ class QueueCustomerSms
             $message = SmsMessage::query()->firstOrCreate(['idempotency_key' => $idempotencyKey], [
                 'customer_id' => $customer?->id, 'hire_id' => $hire?->id, 'custom_order_id' => $order?->id,
                 'requested_by' => $actor?->id, 'location_id' => $location?->id, 'template_id' => $template->id,
-                'recipient' => $customer->phone, 'body' => $body, 'provider' => 'techrise', 'status' => 'queued', 'queued_at' => now(),
+                'recipient' => $customer->phone, 'body' => $body, 'provider' => config('services.sms.provider', 'techrise'), 'status' => 'queued', 'queued_at' => now(),
             ]);
             if ($message->wasRecentlyCreated) {
                 SendSmsMessage::dispatch($message->id)->afterCommit();

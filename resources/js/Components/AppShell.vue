@@ -4,7 +4,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
 import {
     Bell, Boxes, CalendarClock, ChartNoAxesCombined, ChevronDown, ChevronRight, ClipboardList,
-    KeyRound, Landmark, LayoutDashboard, LogOut, MapPinned, Menu, Search, Settings, ShieldCheck, UserRoundCog, UsersRound, WalletCards, X,
+    BookOpen, KeyRound, Landmark, LayoutDashboard, LogOut, MapPinned, Menu, Search, Settings, ShieldCheck, UserRoundCog, UsersRound, WalletCards, X,
 } from '@lucide/vue';
 
 type User = { id: number; name: string; email: string; role: string };
@@ -14,6 +14,9 @@ const props = withDefaults(defineProps<{ active: string; title?: string; actionC
 const page = usePage();
 const online = useOnlineStatus();
 const collapsed = ref(false);
+const inventoryExpanded = ref(false);
+const ordersExpanded = ref(false);
+const paymentsExpanded = ref(false);
 const mobileOpen = ref(false);
 const profileMenuOpen = ref(false);
 const profileMenuRoot = ref<HTMLElement | null>(null);
@@ -27,6 +30,17 @@ type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Pro
 
 const user = computed(() => (page.props.auth as { user: User | null }).user);
 const flash = computed(() => page.props.flash as { success?: string; error?: string } | undefined);
+const currentPath = computed(() => page.url.split('?')[0]);
+const isInventoryPage = computed(() => currentPath.value.startsWith('/inventory'));
+const activeInventorySection = computed(() => currentPath.value === '/inventory/bulk-stock' ? 'bulk-stock' : currentPath.value === '/inventory/cycle-counts' ? 'cycle-counts' : 'inventory');
+const isOrdersPage = computed(() => currentPath.value.startsWith('/custom-orders'));
+const activeOrdersSection = computed(() => currentPath.value === '/custom-orders/create' ? 'create' : 'orders');
+const isPaymentsPage = computed(() => currentPath.value.startsWith('/payments'));
+const activePaymentsSection = computed(() => currentPath.value === '/payments' ? 'overview' : currentPath.value.split('/')[2] ?? 'overview');
+const canCreateOrders = computed(() => !!user.value && ['super_admin', 'management', 'sales_crm'].includes(user.value.role));
+watch(isInventoryPage, (isActive) => { inventoryExpanded.value = isActive; }, { immediate: true });
+watch(isOrdersPage, (isActive) => { ordersExpanded.value = isActive; }, { immediate: true });
+watch(isPaymentsPage, (isActive) => { paymentsExpanded.value = isActive; }, { immediate: true });
 const initials = computed(() => (user.value?.name ?? 'GS').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase());
 const canManageWorkspace = computed(() => !!user.value && ['super_admin', 'management'].includes(user.value.role));
 
@@ -36,12 +50,13 @@ const navigation = computed(() => [
     { label: 'Hiring & Returns', href: '/hiring', key: 'hiring', icon: CalendarClock },
     { label: 'Customers', href: '/customers', key: 'customers', icon: UsersRound },
     { label: 'CRM', href: '/crm', key: 'crm', icon: UserRoundCog },
-    { label: 'Custom Orders', href: '/custom-orders', key: 'custom-orders', icon: ClipboardList },
+    { label: 'Orders', href: '/custom-orders', key: 'orders', icon: ClipboardList },
     { label: 'Locations & Transfers', href: '/transfers', key: 'transfers', icon: MapPinned },
     { label: 'Sales & Payments', href: '/payments', key: 'payments', icon: WalletCards },
     { label: 'Finance', href: '/finance', key: 'finance', icon: ChartNoAxesCombined },
     { label: 'Reports', href: '/reports', key: 'reports', icon: ChartNoAxesCombined },
     { label: 'Graduation Events', href: '/events', key: 'events', icon: CalendarClock },
+    { label: 'User Manual', href: '/user-manual', key: 'manual', icon: BookOpen },
     ...(user.value && ['super_admin', 'management'].includes(user.value.role) ? [
         { label: 'Institutions', href: '/institutions', key: 'institutions', icon: Landmark },
         { label: 'Roles & Permissions', href: '/roles-permissions', key: 'roles-permissions', icon: KeyRound },
@@ -143,19 +158,50 @@ onBeforeUnmount(() => {
             </Link>
 
             <nav class="sidebar-nav">
-                <Link
-                    v-for="item in navigation"
-                    :key="item.key"
-                    :href="item.href"
-                    class="nav-link"
-                    :class="{ active: active === item.key }"
-                    :aria-current="active === item.key ? 'page' : undefined"
-                    @click="mobileOpen = false"
-                >
-                    <component :is="item.icon" aria-hidden="true" />
-                    <span>{{ item.label }}</span>
-                    <ChevronRight v-if="active !== item.key" class="nav-chevron" aria-hidden="true" />
-                </Link>
+                <template v-for="item in navigation" :key="item.key">
+                    <div v-if="item.key === 'inventory'" class="inventory-nav-group">
+                        <button class="nav-link inventory-nav-trigger" type="button" :class="{ active: isInventoryPage }" :aria-expanded="inventoryExpanded" @click="inventoryExpanded = !inventoryExpanded">
+                            <component :is="item.icon" aria-hidden="true" />
+                            <span>{{ item.label }}</span>
+                            <ChevronDown class="nav-chevron inventory-nav-chevron" :class="{ expanded: inventoryExpanded }" aria-hidden="true" />
+                        </button>
+                        <div v-if="inventoryExpanded" class="inventory-subnav">
+                            <Link href="/inventory" class="inventory-subnav-link" :class="{ active: activeInventorySection === 'inventory' }" :aria-current="activeInventorySection === 'inventory' ? 'page' : undefined" @click="mobileOpen = false">Inventory</Link>
+                            <Link href="/inventory/bulk-stock" class="inventory-subnav-link" :class="{ active: activeInventorySection === 'bulk-stock' }" :aria-current="activeInventorySection === 'bulk-stock' ? 'page' : undefined" @click="mobileOpen = false">Bulk Stock</Link>
+                            <Link href="/inventory/cycle-counts" class="inventory-subnav-link" :class="{ active: activeInventorySection === 'cycle-counts' }" :aria-current="activeInventorySection === 'cycle-counts' ? 'page' : undefined" @click="mobileOpen = false">Cycle Count</Link>
+                        </div>
+                    </div>
+                    <div v-else-if="item.key === 'orders'" class="inventory-nav-group">
+                        <button class="nav-link inventory-nav-trigger" type="button" :class="{ active: isOrdersPage }" :aria-expanded="ordersExpanded" @click="ordersExpanded = !ordersExpanded">
+                            <component :is="item.icon" aria-hidden="true" />
+                            <span>{{ item.label }}</span>
+                            <ChevronDown class="nav-chevron inventory-nav-chevron" :class="{ expanded: ordersExpanded }" aria-hidden="true" />
+                        </button>
+                        <div v-if="ordersExpanded" class="inventory-subnav">
+                            <Link href="/custom-orders" class="inventory-subnav-link" :class="{ active: activeOrdersSection === 'orders' }" :aria-current="activeOrdersSection === 'orders' ? 'page' : undefined" @click="mobileOpen = false">Orders</Link>
+                            <Link v-if="canCreateOrders" href="/custom-orders/create" class="inventory-subnav-link" :class="{ active: activeOrdersSection === 'create' }" :aria-current="activeOrdersSection === 'create' ? 'page' : undefined" @click="mobileOpen = false">Create custom order</Link>
+                        </div>
+                    </div>
+                    <div v-else-if="item.key === 'payments'" class="inventory-nav-group">
+                        <button class="nav-link inventory-nav-trigger" type="button" :class="{ active: isPaymentsPage }" :aria-expanded="paymentsExpanded" @click="paymentsExpanded = !paymentsExpanded">
+                            <component :is="item.icon" aria-hidden="true" />
+                            <span>Payments</span>
+                            <ChevronDown class="nav-chevron inventory-nav-chevron" :class="{ expanded: paymentsExpanded }" aria-hidden="true" />
+                        </button>
+                        <div v-if="paymentsExpanded" class="inventory-subnav">
+                            <Link href="/payments" class="inventory-subnav-link" :class="{ active: activePaymentsSection === 'overview' }" @click="mobileOpen = false">Overview</Link>
+                            <Link href="/payments/receipts" class="inventory-subnav-link" :class="{ active: activePaymentsSection === 'receipts' }" @click="mobileOpen = false">Receipts</Link>
+                            <Link href="/payments/deposits" class="inventory-subnav-link" :class="{ active: activePaymentsSection === 'deposits' }" @click="mobileOpen = false">Deposits</Link>
+                            <Link href="/payments/penalties" class="inventory-subnav-link" :class="{ active: activePaymentsSection === 'penalties' }" @click="mobileOpen = false">Penalties & refunds</Link>
+                            <Link href="/payments/expenses" class="inventory-subnav-link" :class="{ active: activePaymentsSection === 'expenses' }" @click="mobileOpen = false">Expenses</Link>
+                        </div>
+                    </div>
+                    <Link v-else :href="item.href" class="nav-link" :class="{ active: active === item.key }" :aria-current="active === item.key ? 'page' : undefined" @click="mobileOpen = false">
+                        <component :is="item.icon" aria-hidden="true" />
+                        <span>{{ item.label }}</span>
+                        <ChevronRight v-if="active !== item.key" class="nav-chevron" aria-hidden="true" />
+                    </Link>
+                </template>
             </nav>
 
             <div class="sidebar-quote" aria-label="Celebrating every milestone in style">
@@ -234,6 +280,9 @@ onBeforeUnmount(() => {
                         </button>
                     </div>
                 </div>
+                <button class="icon-button sign-out-button" type="button" aria-label="Sign out" title="Sign out" @click="signOut">
+                    <LogOut aria-hidden="true" />
+                </button>
             </header>
 
             <main class="page-content" :class="{ 'dashboard-page-content': props.active === 'dashboard' }">

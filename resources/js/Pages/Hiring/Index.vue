@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { CalendarClock, Search, ScanLine, Plus } from '@lucide/vue';
+import { CalendarClock, Search, ScanLine, Plus, X } from '@lucide/vue';
 import AppShell from '../../Components/AppShell.vue';
 import Pagination from '../../Components/Pagination.vue';
 
@@ -20,6 +20,30 @@ function dateLabel(value: string | null): string {
     return value ? new Date(value).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not issued';
 }
 
+function dueState(hire: Hire): { label: string; tone: string } {
+    if (!hire.due_at) return { label: 'Not issued', tone: 'neutral' };
+    if (!['issued', 'partially_returned'].includes(hire.status)) return { label: dateLabel(hire.due_at), tone: 'neutral' };
+
+    const due = new Date(hire.due_at);
+    due.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+    if (days < 0) return { label: `${Math.abs(days)} day${days === -1 ? '' : 's'} overdue`, tone: 'overdue' };
+    if (days === 0) return { label: 'Due today', tone: 'today' };
+    if (days <= 3) return { label: `Due in ${days} day${days === 1 ? '' : 's'}`, tone: 'soon' };
+    return { label: dateLabel(hire.due_at), tone: 'neutral' };
+}
+
+function statusLabel(value: string): string {
+    return value.replaceAll('_', ' ');
+}
+
+function clearFilters(): void {
+    query.value = '';
+    status.value = '';
+}
+
 function cancelReservation(hire: Hire): void {
     if (!window.confirm(`Cancel reservation ${hire.reference} and release its gowns?`)) return;
     router.post(`/hiring/${hire.id}/cancel`, { reason: 'Cancelled by authorized staff.' }, { preserveScroll: true });
@@ -33,21 +57,27 @@ function cancelReservation(hire: Hire): void {
             <div><h1>Hiring & returns</h1><p>Track active gown custody, due dates and completed returns.</p></div>
             <div class="heading-actions"><Link v-if="canOperate" href="/hiring/reservations/create" class="secondary-link"><Plus aria-hidden="true" /> Reserve gowns</Link><Link v-if="canOperate" href="/returns/scan" class="secondary-link"><ScanLine aria-hidden="true" /> Scan return</Link><Link v-if="canOperate" href="/hiring/issue" class="primary-link"><Plus aria-hidden="true" /> Issue gowns</Link></div>
         </div>
-        <div class="toolbar">
-            <label class="global-search hiring-search"><Search aria-hidden="true" /><input v-model="query" type="search" placeholder="Search customer or hire reference" aria-label="Search hiring records"></label>
-            <select v-model="status" class="filter-select" aria-label="Filter hiring status">
+        <div class="hiring-toolbar">
+            <label class="global-search hiring-search"><Search aria-hidden="true" /><input v-model="query" type="search" placeholder="Search customer, phone, or hire reference" aria-label="Search hiring records"></label>
+            <label class="status-filter"><span>Status</span><select v-model="status" class="filter-select" aria-label="Filter hiring status">
                 <option value="">All statuses</option><option value="due_today">Due today</option><option value="overdue">Overdue</option><option value="issued">Issued</option><option value="partially_returned">Partially returned</option><option value="returned_pending_inspection">Returned for inspection</option><option value="completed">Completed</option><option value="reserved">Reserved</option><option value="cancelled">Cancelled</option>
-            </select>
+            </select></label>
+            <button v-if="query || status" class="clear-hiring-filters" type="button" @click="clearFilters"><X aria-hidden="true" /> Clear filters</button>
         </div>
         <section class="panel table-panel">
+            <div class="hiring-results-bar"><strong>Hire records</strong><span v-if="hires.total">Showing {{ hires.from ?? 0 }}–{{ hires.to ?? 0 }} of {{ hires.total }}</span><span v-else>No records</span></div>
             <div v-if="hires.data.length" class="table-wrap">
-                <table class="data-table">
-                    <thead><tr><th>Hire reference</th><th>Customer</th><th>Items</th><th>Pickup location</th><th>Created</th><th>Due</th><th>Status</th><th v-if="canOperate">Action</th></tr></thead>
+                <table class="data-table hiring-table">
+                    <thead><tr><th>Hire reference</th><th>Customer</th><th>Items &amp; returns</th><th>Pickup location</th><th>Due date</th><th>Status</th><th v-if="canOperate">Next step</th></tr></thead>
                     <tbody>
-                        <tr v-for="hire in hires.data" :key="hire.id">
-                            <td><strong>{{ hire.reference }}</strong></td><td>{{ hire.customer.name }}<small class="table-subline">{{ hire.customer.phone ?? 'No phone recorded' }}</small></td>
-                            <td><span v-for="item in hire.items" :key="item.product_name_snapshot">{{ item.product_name_snapshot }} ({{ item.returned_quantity }}/{{ item.quantity }})<br></span></td>
-                            <td>{{ hire.location.name }}</td><td>{{ dateLabel(hire.created_at) }}</td><td>{{ dateLabel(hire.due_at) }}</td><td><span class="status-chip" :class="hire.status">{{ hire.status.replaceAll('_', ' ') }}</span></td><td v-if="canOperate" class="hire-actions"><template v-if="hire.status === 'reserved'"><Link :href="`/hiring/${hire.id}/issue-reservation`" class="secondary-link compact-action">Handover</Link><button class="danger-link" type="button" @click="cancelReservation(hire)">Cancel</button></template><span v-else>—</span></td>
+                        <tr v-for="hire in hires.data" :key="hire.id" :class="{ 'hire-row-overdue': dueState(hire).tone === 'overdue' }">
+                            <td data-label="Hire reference"><strong class="hire-reference">{{ hire.reference }}</strong><small class="table-subline">{{ dateLabel(hire.created_at) }} · {{ hire.items.reduce((sum, item) => sum + item.quantity, 0) }} gown{{ hire.items.reduce((sum, item) => sum + item.quantity, 0) === 1 ? '' : 's' }}</small></td>
+                            <td data-label="Customer"><strong class="hire-customer-name">{{ hire.customer.name }}</strong><small class="table-subline">{{ hire.customer.phone ?? 'No phone recorded' }}</small></td>
+                            <td data-label="Items & returns"><div class="hire-item-list"><div v-for="(item, index) in hire.items" :key="`${item.product_name_snapshot}-${index}`" class="hire-item"><span class="hire-item-copy"><strong>{{ item.product_name_snapshot }}</strong><small>{{ item.returned_quantity }} of {{ item.quantity }} returned</small></span><span class="hire-item-progress" role="img" :aria-label="`${item.returned_quantity} of ${item.quantity} returned`"><span :style="{ width: `${item.quantity ? Math.min(100, item.returned_quantity / item.quantity * 100) : 0}%` }" /></span></div></div></td>
+                            <td data-label="Pickup location"><span class="hire-location">{{ hire.location.name }}</span></td>
+                            <td data-label="Due date"><div class="hire-due" :class="`due-${dueState(hire).tone}`"><strong>{{ dueState(hire).label }}</strong><small v-if="hire.due_at">{{ dateLabel(hire.due_at) }}</small></div></td>
+                            <td data-label="Status"><span class="status-chip hiring-status" :class="hire.status">{{ statusLabel(hire.status) }}</span></td>
+                            <td v-if="canOperate" data-label="Next step" class="hire-actions"><template v-if="hire.status === 'reserved'"><Link :href="`/hiring/${hire.id}/issue-reservation`" class="secondary-link compact-action">Handover</Link><button class="danger-link" type="button" @click="cancelReservation(hire)">Cancel</button></template><span v-else class="no-hire-action">No action</span></td>
                         </tr>
                     </tbody>
                 </table>
@@ -60,10 +90,91 @@ function cancelReservation(hire: Hire): void {
 
 <style scoped>
 .heading-actions { display: flex; gap: 8px; }
-.hire-actions { display: flex; align-items: center; gap: 6px; }
-.compact-action { min-height: 30px; padding: 5px 8px; font-size: 10px; }
-.danger-link { border: 0; background: transparent; color: #b4232a; cursor: pointer; font-size: 10px; }
+.hiring-toolbar { display: flex; align-items: end; gap: 11px; margin: 0 0 14px; }
 .hiring-search { width: min(360px, 100%); }
+.hiring-search input { font-size: 13px; }
+.status-filter { display: grid; gap: 5px; color: #555e6b; font-size: 12px; font-weight: 650; }
+.status-filter .filter-select { min-width: 170px; min-height: 42px; font-size: 13px; }
+.clear-hiring-filters { display: inline-flex; min-height: 38px; align-items: center; gap: 5px; border: 0; background: transparent; padding: 0 7px; color: #a91e26; cursor: pointer; font-size: 11px; font-weight: 650; }
+.clear-hiring-filters svg { width: 14px; height: 14px; }
+.hiring-results-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-bottom: 1px solid #eceef0; padding: 0 18px 12px; }
+.hiring-results-bar strong { color: #252c37; font-size: 14px; font-weight: 750; }
+.hiring-results-bar span { color: #626b78; font-size: 12px; font-variant-numeric: tabular-nums; }
+.hiring-table { width: 100%; min-width: 1180px; table-layout: fixed; white-space: normal; }
+.hiring-table th { white-space: nowrap; font-size: 13px; }
+.hiring-table td { vertical-align: middle; font-size: 13px; }
+.hiring-table th:nth-child(1), .hiring-table td:nth-child(1) { width: 16%; }
+.hiring-table th:nth-child(2), .hiring-table td:nth-child(2) { width: 15%; }
+.hiring-table th:nth-child(3), .hiring-table td:nth-child(3) { width: 22%; }
+.hiring-table th:nth-child(4), .hiring-table td:nth-child(4) { width: 12%; }
+.hiring-table th:nth-child(5), .hiring-table td:nth-child(5) { width: 14%; }
+.hiring-table th:nth-child(6), .hiring-table td:nth-child(6) { width: 11%; }
+.hiring-table th:nth-child(7), .hiring-table td:nth-child(7) { width: 10%; }
+.hiring-table td:nth-child(5), .hiring-table td:nth-child(6) { white-space: nowrap; }
+.hiring-table .table-subline { display: block; }
+.hire-reference { color: #272e39; font-size: 14px; font-weight: 750; letter-spacing: .01em; white-space: nowrap; }
+.hire-customer-name { color: #303744; font-size: 14px; font-weight: 700; }
+.hiring-table .table-subline { margin-top: 4px; color: #555f6b; font-size: 12px; }
+.hire-item-list { display: grid; min-width: 150px; gap: 8px; }
+.hire-item { display: grid; gap: 5px; }
+.hire-item-copy { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.hire-item-copy strong { overflow: hidden; color: #303945; font-size: 13px; font-weight: 600; text-overflow: ellipsis; }
+.hire-item-copy small { flex: 0 0 auto; color: #515b68; font-size: 12px; }
+.hire-item-progress { display: block; height: 4px; overflow: hidden; border-radius: 5px; background: #edf0f2; }
+.hire-item-progress > span { display: block; height: 100%; border-radius: inherit; background: #35a176; transition: width .2s ease; }
+.hire-location { color: #39424e; font-size: 13px; line-height: 1.45; }
+.hire-due { display: grid; gap: 4px; min-width: 93px; }
+.hire-due strong { color: #303945; font-size: 13px; font-weight: 700; }
+.hire-due small { color: #555f6b; font-size: 12px; }
+.hire-due.due-overdue strong { color: #b4232a; }
+.hire-due.due-today strong { color: #ad5b00; }
+.hire-due.due-soon strong { color: #8a641d; }
+.hire-row-overdue { background: #fffafa; }
+.hiring-status { display: inline-flex; min-height: 29px; align-items: center; border-radius: 20px; padding: 5px 10px; font-size: 12px; font-weight: 700; text-transform: capitalize; }
+.hiring-status.issued { border: 1px solid #d3e7f8; background: #eef7ff; color: #28658d; }
+.hiring-status.partially_returned { border: 1px solid #f2dfb6; background: #fff8e7; color: #916516; }
+.hiring-status.reserved { border: 1px solid #e2d7f5; background: #f6f0ff; color: #7043a3; }
+.hiring-status.completed { border: 1px solid #cce8dc; background: #edfaf4; color: #237451; }
+.hiring-status.cancelled { border: 1px solid #e6e8eb; background: #f3f4f6; color: #656c78; }
+.hiring-status.returned_pending_inspection { border: 1px solid #f4dcc0; background: #fff5e9; color: #a75b1e; }
+.hire-actions { display: flex; min-width: 0; flex-direction: column; align-items: stretch; gap: 4px; }
+.compact-action { min-height: 36px; padding: 7px 9px; font-size: 13px; white-space: nowrap; }
+.danger-link { border: 0; border-radius: 6px; background: transparent; padding: 7px; color: #b4232a; cursor: pointer; font-size: 13px; }
+.danger-link:hover { background: #fff0f0; }
+.no-hire-action { color: #747d89; font-size: 13px; }
+.table-panel :deep(.pagination) { font-size: 12px; }
+.table-panel :deep(.pagination-link) { min-width: 34px; min-height: 34px; font-size: 12px; }
 .empty-action { margin-top: 14px; }
-@media (max-width: 700px) { .heading-actions { width: 100%; } .heading-actions > * { flex: 1; } }
+@media (max-width: 900px) { .hiring-table { min-width: 1180px; }.hiring-table th:first-child, .hiring-table td:first-child, .hiring-table td:nth-child(2), .hiring-table td:nth-child(3) { min-width: 0; } }
+@media (max-width: 700px) {
+    .heading-actions { width: 100%; flex-wrap: wrap; }
+    .heading-actions > * { flex: 1 1 30%; justify-content: center; }
+    .hiring-toolbar { align-items: stretch; flex-wrap: wrap; }
+    .hiring-search { width: 100%; flex: 1 1 100%; }
+    .status-filter { flex: 1; }
+    .status-filter .filter-select { width: 100%; }
+    .hiring-results-bar { padding: 0 13px 10px; }
+    .hiring-results-bar span { text-align: right; }
+    .hiring-table { min-width: 0; }
+    .hiring-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
+    .hiring-table, .hiring-table tbody { display: block; width: 100%; }
+    .hiring-table tbody { display: grid; gap: 10px; padding: 10px; }
+    .hiring-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 14px; border: 1px solid #e9ebee; border-radius: 11px; background: #fff; padding: 13px; box-shadow: 0 2px 8px rgb(26 33 44 / 4%); }
+    .hiring-table tbody tr.hire-row-overdue { border-color: #f0d9da; background: #fffafa; }
+    .hiring-table td, .hiring-table td:nth-child(n) { display: grid; width: auto; min-width: 0; gap: 5px; border: 0; padding: 0 !important; white-space: normal; }
+    .hiring-table td::before { color: #66707d; content: attr(data-label); font-size: 11px; font-weight: 700; letter-spacing: .035em; text-transform: uppercase; }
+    .hiring-table td:first-child, .hiring-table td:nth-child(2), .hiring-table td:nth-child(3) { grid-column: 1 / -1; }
+    .hiring-table td:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eff0f2; padding-bottom: 9px !important; }
+    .hiring-table td:first-child::before { display: none; }
+    .hiring-table td:first-child .table-subline { margin: 0; }
+    .hiring-table td:nth-child(2) { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; row-gap: 2px; }
+    .hiring-table td:nth-child(2)::before { flex: 0 0 100%; }
+    .hiring-table td:nth-child(2) .table-subline { margin: 0; }
+    .hiring-table td:nth-child(3) { padding-bottom: 2px !important; }
+    .hiring-table td:nth-child(3)::before { margin-bottom: 1px; }
+    .hire-item-list { min-width: 0; gap: 9px; }
+    .hire-item-copy strong { font-size: 12px; }
+    .hire-actions { min-width: 0; flex-direction: row; }
+}
+@media (max-width: 420px) { .heading-actions > * { flex-basis: 100%; }.hiring-table tbody tr { gap: 10px; padding: 11px; }.hiring-table td:nth-child(4) { grid-column: 1 / -1; } }
 </style>

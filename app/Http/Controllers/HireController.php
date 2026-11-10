@@ -8,9 +8,12 @@ use App\Models\BulkStockBalance;
 use App\Models\Customer;
 use App\Models\GraduationEvent;
 use App\Models\Hire;
+use App\Models\Institution;
 use App\Models\LateReturnPolicy;
 use App\Models\Location;
+use App\Models\PhysicalAsset;
 use App\Models\Product;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -61,6 +64,7 @@ class HireController extends Controller
                     ->whereHas('locations', fn ($locations) => $locations->whereIn('locations.id', $allowedLocationIds))
                     ->orWhereHas('hires', fn ($hires) => $hires->whereIn('location_id', $allowedLocationIds))))
                 ->orderBy('name')->limit(100)->get(),
+            'institutions' => Institution::query()->where('is_active', true)->orderBy('name')->limit(500)->get(['id', 'name', 'type']),
             'graduationEvents' => GraduationEvent::query()->whereIn('status', ['planned', 'confirmed'])
                 ->whereDate('event_date', '>=', now(config('app.timezone'))->toDateString())
                 ->when($allowedLocationIds !== null, fn ($query) => $query->whereIn('location_id', $allowedLocationIds))
@@ -72,6 +76,74 @@ class HireController extends Controller
                 ->when($allowedLocationIds !== null, fn ($query) => $query->whereIn('location_id', $allowedLocationIds))
                 ->get(['product_id', 'location_id', 'on_hand', 'reserved', 'pending_inspection', 'damaged'])
                 ->map(fn (BulkStockBalance $balance): array => ['productId' => $balance->product_id, 'locationId' => $balance->location_id, 'available' => $balance->available]),
+        ]);
+    }
+
+    public function searchCustomers(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless(in_array($user->role, ['super_admin', 'management', 'storekeeper', 'sales_crm'], true), 403);
+        $term = trim($request->string('q')->toString());
+        abort_if(mb_strlen($term) < 2, 422, 'Enter at least two characters to search.');
+        $allowedLocationIds = $user->mayViewAllLocations()
+            ? null
+            : $user->locations()->where('is_active', true)->pluck('locations.id')->all();
+
+        $customers = Customer::query()->select(['id', 'name', 'customer_number', 'phone', 'institution_id'])
+            ->when($allowedLocationIds !== null, fn ($query) => $query->where(fn ($customers) => $customers
+                ->whereHas('locations', fn ($locations) => $locations->whereIn('locations.id', $allowedLocationIds))
+                ->orWhereHas('hires', fn ($hires) => $hires->whereIn('location_id', $allowedLocationIds))))
+            ->where(fn ($query) => $query->where('name', 'like', "%{$term}%")
+                ->orWhere('customer_number', 'like', "%{$term}%")
+                ->orWhere('phone', 'like', "%{$term}%"))
+            ->orderBy('name')->limit(30)->get();
+
+        return response()->json(['customers' => $customers]);
+    }
+
+    public function checkAssetAvailability(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:64'],
+            'location_id' => ['required', 'integer', 'exists:locations,id'],
+        ]);
+        $user = $request->user();
+        $location = Location::query()->whereKey($validated['location_id'])->where('is_active', true)->first();
+
+        if ($location === null || (! $user->mayViewAllLocations() && ! $user->locations()->whereKey($location->id)->exists())) {
+            abort(403);
+        }
+
+        $code = mb_strtoupper(trim($validated['code']));
+        $asset = PhysicalAsset::query()->with(['product:id,name', 'currentLocation:id,name'])
+            ->whereRaw('UPPER(asset_code) = ?', [$code])->first();
+
+        if ($asset === null) {
+            return response()->json(['available' => false, 'message' => "Barcode {$code} was not found in inventory."]);
+        }
+
+        if ($asset->status !== 'available') {
+            return response()->json([
+                'available' => false,
+                'message' => "Gown {$asset->asset_code} is not available (status: ".str_replace('_', ' ', $asset->status).').',
+            ]);
+        }
+
+        if ($asset->current_location_id !== $location->id || $asset->current_transfer_id !== null) {
+            $currentLocation = $asset->currentLocation?->name ?? 'another location';
+
+            return response()->json([
+                'available' => false,
+                'message' => "Gown {$asset->asset_code} is at {$currentLocation} and is not available at {$location->name}.",
+            ]);
+        }
+
+        return response()->json([
+            'available' => true,
+            'assetCode' => $asset->asset_code,
+            'productName' => $asset->product?->name,
+            'locationName' => $location->name,
+            'message' => "Gown {$asset->asset_code} is available at {$location->name}.",
         ]);
     }
 
@@ -144,6 +216,6 @@ class HireController extends Controller
 
         $quantity = $bulkItems !== [] ? array_sum(array_column($bulkItems, 'quantity')) : count($assetCodes);
 
-        return redirect()->route('dashboard')->with('success', $quantity.' gown(s) issued successfully. Hire reference '.$hire->reference.'.');
+        return redirect()->route('hiring.issue')->with('success', $quantity.' gown(s) issued successfully. Hire reference '.$hire->reference.'.');
     }
 }

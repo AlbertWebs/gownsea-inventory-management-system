@@ -60,9 +60,15 @@ class SettingsController extends Controller
         $backupDirectory = rtrim((string) config('services.gownsea_backup.directory'), DIRECTORY_SEPARATOR);
         $backups = glob($backupDirectory.DIRECTORY_SEPARATOR.'*.gwbak') ?: [];
         usort($backups, fn (string $left, string $right): int => filemtime($right) <=> filemtime($left));
-        $techrise = app(IntegrationSettings::class)->techrise();
+        $smsProvider = (string) config('services.sms.provider', 'techrise');
+        $smsConfiguration = $smsProvider === 'onfon'
+            ? app(IntegrationSettings::class)->onfon()
+            : app(IntegrationSettings::class)->techrise();
         $daraja = app(IntegrationSettings::class)->daraja();
-        $smsConfigured = filled($techrise['client_id']) && filled($techrise['api_key']) && filled($techrise['sender_id']);
+        $smsConfigured = filled($smsConfiguration['client_id'])
+            && filled($smsConfiguration['api_key'])
+            && filled($smsConfiguration['sender_id'])
+            && ($smsProvider !== 'onfon' || filled($smsConfiguration['access_key']));
         $darajaConfigured = app(IntegrationSettings::class)->darajaEnabled($daraja);
         $databaseAvailable = true;
         try {
@@ -385,8 +391,11 @@ class SettingsController extends Controller
         ];
 
         $businessProfile = $valueFor('business_profile', [
-            'legal_name' => '', 'trading_name' => '', 'registered_address' => '',
+            'legal_name' => 'Graduation Gowns East Africa Limited', 'trading_name' => 'GOWNSEA', 'registered_address' => '',
+            'receipt_phone' => '', 'receipt_email' => '', 'receipt_website' => '', 'receipt_footer' => '',
         ]);
+        $businessProfile['legal_name'] = filled($businessProfile['legal_name'] ?? null) ? $businessProfile['legal_name'] : 'Graduation Gowns East Africa Limited';
+        $businessProfile['trading_name'] = filled($businessProfile['trading_name'] ?? null) ? $businessProfile['trading_name'] : 'GOWNSEA';
         $businessProfile['kra_pin_configured'] = filled($businessProfile['kra_pin'] ?? null);
         unset($businessProfile['kra_pin']);
 

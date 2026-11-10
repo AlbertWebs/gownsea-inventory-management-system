@@ -10,14 +10,17 @@ use App\Http\Requests\StoreLeadActivityRequest;
 use App\Http\Requests\StoreLeadRequest;
 use App\Http\Requests\StoreLeadTaskRequest;
 use App\Http\Requests\UpdateLeadRequest;
+use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Institution;
 use App\Models\Lead;
+use App\Models\LeadActivity;
 use App\Models\LeadTask;
 use App\Models\Location;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -59,6 +62,26 @@ class LeadController extends Controller
         $lead = $save->update($lead, $request->validated(), $request->user(), $request->ip(), $request->userAgent());
 
         return back()->with('success', "Lead {$lead->reference} updated.");
+    }
+
+    public function moveStage(Request $request, Lead $lead): RedirectResponse
+    {
+        abort_unless($request->user()->can('update', $lead), 403);
+        $data = $request->validate([
+            'stage' => ['required', 'string', 'in:new,contacted,quotation_sent,negotiation,won,lost'],
+            'lost_reason' => ['nullable', 'required_if:stage,lost', 'string', 'min:5', 'max:180'],
+        ]);
+
+        DB::transaction(function () use ($request, $lead, $data): void {
+            $lead = Lead::query()->lockForUpdate()->findOrFail($lead->id);
+            $before = $lead->only(['reference', 'location_id', 'customer_id', 'institution_id', 'stage', 'estimated_value_minor', 'probability', 'next_action', 'follow_up_at', 'lost_reason']);
+            $lead->update(['stage' => $data['stage'], 'lost_reason' => $data['stage'] === 'lost' ? $data['lost_reason'] : null]);
+            $after = $lead->fresh()->only(array_keys($before));
+            LeadActivity::query()->create(['lead_id' => $lead->id, 'actor_id' => $request->user()->id, 'activity_type' => 'lead.stage_changed', 'before_state' => $before, 'after_state' => $after, 'happened_at' => now()]);
+            AuditLog::query()->create(['actor_id' => $request->user()->id, 'location_id' => $lead->location_id, 'action' => 'lead.stage_changed', 'subject_type' => Lead::class, 'subject_id' => $lead->id, 'before_state' => $before, 'after_state' => $after, 'ip_address' => $request->ip(), 'user_agent' => $request->userAgent(), 'occurred_at' => now()]);
+        }, attempts: 3);
+
+        return back()->with('success', "Lead {$lead->reference} moved to ".str_replace('_', ' ', $data['stage']).'.');
     }
 
     public function convert(Request $request, Lead $lead, ConvertLeadToCustomer $convert): RedirectResponse

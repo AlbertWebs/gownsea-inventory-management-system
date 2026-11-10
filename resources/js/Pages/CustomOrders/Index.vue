@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ClipboardList, Plus, Save, X } from '@lucide/vue';
+import { ClipboardList, Pencil, Plus, Save, X } from '@lucide/vue';
 import AppShell from '../../Components/AppShell.vue';
 import Pagination from '../../Components/Pagination.vue';
 
@@ -20,9 +20,9 @@ type Order = {
 };
 type Page<T> = { data: T[]; links: { url: string | null; label: string; active: boolean }[]; from: number | null; to: number | null; total: number };
 
-const props = defineProps<{ orders: Page<Order>; locations: Option[]; customers: (Option & { institution_id: number | null; location_ids: number[] })[]; institutions: Option[]; staff: Option[]; canCreate: boolean; canEdit: boolean; isProduction: boolean }>();
+const props = defineProps<{ view: 'orders' | 'create'; orders: Page<Order>; locations: Option[]; customers: (Option & { institution_id: number | null; location_ids: number[] })[]; institutions: Option[]; staff: Option[]; canCreate: boolean; canEdit: boolean; isProduction: boolean }>();
 const editing = ref<Order | null>(null);
-const measurementText = ref('');
+const measurementRows = ref<{ name: string; value: string }[]>([]);
 const statusOptions = ['new', 'quoted', 'in_production', 'ready_for_collection', 'dispatched', 'delivered', 'completed', 'cancelled'];
 const visibleCustomers = computed(() => props.customers.filter((customer) => !form.location_id || customer.location_ids.includes(Number(form.location_id))));
 const form = useForm({
@@ -33,7 +33,7 @@ const form = useForm({
 });
 const taskForm = useForm({ task_type: 'sewing', title: '', description: '', assigned_to: '', due_date: '', status: 'todo', reason: '', order: '' });
 const editingTaskId = ref<number | null>(null);
-const fittingMeasurementText = ref('');
+const fittingMeasurementRows = ref<{ name: string; value: string }[]>([]);
 const editingFittingId = ref<number | null>(null);
 const fittingScheduleForm = useForm({ appointment_at: '', assigned_to: '' });
 const fittingUpdateForm = useForm({ status: 'completed', measurements: null as Record<string, string> | null, outcome: '' });
@@ -56,7 +56,7 @@ function localDateTime(): string {
 
 function resetForm(): void {
     editing.value = null;
-    measurementText.value = '';
+    measurementRows.value = [];
     form.reset();
     form.clearErrors();
     form.order_date = localDate();
@@ -68,7 +68,17 @@ function resetForm(): void {
     form.status = 'new';
 }
 
-function beginEdit(order: Order): void {
+function rowsFromMeasurements(measurements: Record<string, string> | null): { name: string; value: string }[] {
+    return measurements ? Object.entries(measurements).map(([name, value]) => ({ name, value })) : [];
+}
+
+function measurementsFromRows(rows: { name: string; value: string }[]): Record<string, string> | null {
+    const filledRows = rows.filter((row) => row.name.trim() || row.value.trim());
+    if (filledRows.some((row) => !row.name.trim() || !row.value.trim())) return null;
+    return filledRows.length ? Object.fromEntries(filledRows.map((row) => [row.name.trim(), row.value.trim()])) : null;
+}
+
+async function beginEdit(order: Order): Promise<void> {
     editing.value = order;
     form.clearErrors();
     form.location_id = String(props.locations.find((location) => location.name === order.location)?.id ?? '');
@@ -78,7 +88,7 @@ function beginEdit(order: Order): void {
     form.size = order.size ?? '';
     form.color = order.color ?? '';
     form.quantity = String(order.quantity);
-    measurementText.value = order.measurements ? JSON.stringify(order.measurements, null, 2) : '';
+    measurementRows.value = rowsFromMeasurements(order.measurements);
     form.design_specs = order.designSpecs ?? '';
     form.special_requirements = order.specialRequirements ?? '';
     form.agreed_total = order.agreedTotal;
@@ -93,23 +103,16 @@ function beginEdit(order: Order): void {
     form.notes = order.notes ?? '';
     form.status = order.status;
     form.reason = '';
+    await nextTick();
     document.querySelector('#custom-order-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelector<HTMLInputElement>('#order-item')?.focus({ preventScroll: true });
 }
 
 function submit(): void {
-    let measurements: Record<string, string> | null = null;
-    if (measurementText.value.trim()) {
-        try {
-            const parsed: unknown = JSON.parse(measurementText.value);
-            if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed) || Object.values(parsed).some((value) => typeof value !== 'string')) {
-                form.setError('measurements', 'Enter a JSON object with text values, such as {"chest":"96 cm"}.');
-                return;
-            }
-            measurements = parsed as Record<string, string>;
-        } catch {
-            form.setError('measurements', 'Enter valid JSON for measurements.');
-            return;
-        }
+    const measurements = measurementsFromRows(measurementRows.value);
+    if (measurementRows.value.some((row) => row.name.trim() || row.value.trim()) && !measurements) {
+        form.setError('measurements', 'Complete both the measurement name and value, or remove the empty row.');
+        return;
     }
 
     form.clearErrors('measurements');
@@ -157,14 +160,14 @@ function startFittingEdit(fitting: Order['fittings'][number]): void {
     fittingUpdateForm.clearErrors();
     fittingUpdateForm.status = 'completed';
     fittingUpdateForm.outcome = fitting.outcome ?? '';
-    fittingMeasurementText.value = fitting.measurements ? JSON.stringify(fitting.measurements, null, 2) : '';
+    fittingMeasurementRows.value = rowsFromMeasurements(fitting.measurements);
 }
 
 function resetFittingEdit(): void {
     editingFittingId.value = null;
     fittingUpdateForm.reset();
     fittingUpdateForm.status = 'completed';
-    fittingMeasurementText.value = '';
+    fittingMeasurementRows.value = [];
 }
 
 function scheduleFitting(): void {
@@ -175,19 +178,10 @@ function scheduleFitting(): void {
 
 function submitFittingUpdate(): void {
     if (!editing.value || !editingFittingId.value) return;
-    let measurements: Record<string, string> | null = null;
-    if (fittingMeasurementText.value.trim()) {
-        try {
-            const parsed: unknown = JSON.parse(fittingMeasurementText.value);
-            if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed) || Object.values(parsed).some((value) => typeof value !== 'string')) {
-                fittingUpdateForm.setError('measurements', 'Enter a JSON object with text values.');
-                return;
-            }
-            measurements = parsed as Record<string, string>;
-        } catch {
-            fittingUpdateForm.setError('measurements', 'Enter valid JSON for fitting measurements.');
-            return;
-        }
+    const measurements = measurementsFromRows(fittingMeasurementRows.value);
+    if (fittingMeasurementRows.value.some((row) => row.name.trim() || row.value.trim()) && !measurements) {
+        fittingUpdateForm.setError('measurements', 'Complete both the measurement name and value, or remove the empty row.');
+        return;
     }
     fittingUpdateForm.transform((data) => ({ ...data, measurements }));
     fittingUpdateForm.patch(`/custom-orders/${editing.value.id}/fittings/${editingFittingId.value}`, { preserveScroll: true, onSuccess: resetFittingEdit });
@@ -218,12 +212,13 @@ function dateLabel(value: string): string {
 </script>
 
 <template>
-    <Head title="Custom Orders" />
-    <AppShell active="custom-orders">
-        <div class="page-heading"><div><h1>Custom Orders</h1><p>Manage made-to-order graduation wear from customer brief through collection or delivery.</p></div><div class="heading-actions"><Link href="/crm" class="secondary-link">CRM pipeline</Link><Link href="/quotations" class="secondary-link">Quotations</Link><button v-if="canCreate" class="primary-link" type="button" @click="resetForm"><Plus aria-hidden="true" /> New custom order</button></div></div>
+    <Head :title="view === 'create' ? 'Create custom order' : 'Orders'" />
+    <AppShell active="orders">
+        <div class="page-heading"><div><h1>{{ view === 'create' ? 'Create custom order' : 'Orders' }}</h1><p>{{ view === 'create' ? 'Capture customer requirements, garment details, pricing, and delivery plans.' : 'Track made-to-order graduation wear from customer brief through collection or delivery.' }}</p></div><div class="heading-actions"><template v-if="view === 'orders'"><Link href="/crm" class="secondary-link">CRM pipeline</Link><Link href="/quotations" class="secondary-link">Quotations</Link><Link v-if="canCreate" href="/custom-orders/create" class="primary-link"><Plus aria-hidden="true" /> Create custom order</Link></template><Link v-else href="/custom-orders" class="secondary-link">Orders</Link></div></div>
 
-        <section v-if="canCreate || editing" id="custom-order-editor" class="panel order-editor">
+        <section v-if="editing || (view === 'create' && canCreate)" id="custom-order-editor" class="panel order-editor">
             <div class="panel-heading"><div><h2>{{ editing ? `Update ${editing.reference}` : 'Create a custom order' }}</h2><p>{{ isProduction ? 'Production staff can update status and tracking after assignment.' : 'Record specifications, pricing, deposit requirement and delivery details.' }}</p></div><button v-if="editing" class="icon-button" aria-label="Close order form" type="button" @click="resetForm"><X aria-hidden="true" /></button></div>
+            <div v-if="editing" class="order-update-notice"><ClipboardList aria-hidden="true" /><span>Changes are added to the order history. Enter a reason below before saving.</span></div>
             <form class="form-grid" @submit.prevent="submit">
                 <div v-if="!editing" class="form-field"><label for="order-location">Branch</label><select id="order-location" v-model="form.location_id" class="select-field" required><option value="" disabled>Select branch</option><option v-for="location in locations" :key="location.id" :value="String(location.id)">{{ location.name }}</option></select><small v-if="form.errors.location_id" class="form-error">{{ form.errors.location_id }}</small></div>
                 <div v-if="!editing" class="form-field"><label for="order-customer">Customer</label><select id="order-customer" v-model="form.customer_id" class="select-field" required><option value="" disabled>Select customer</option><option v-for="customer in visibleCustomers" :key="customer.id" :value="String(customer.id)">{{ customer.name }}</option></select><small v-if="form.errors.customer_id" class="form-error">{{ form.errors.customer_id }}</small></div>
@@ -238,16 +233,16 @@ function dateLabel(value: string): string {
                 <div class="form-field"><label for="order-priority">Priority</label><select id="order-priority" v-model="form.priority" class="select-field" :disabled="isProduction"><option v-for="priority in ['low','normal','high','urgent']" :key="priority" :value="priority">{{ priority }}</option></select></div>
                 <div class="form-field"><label for="order-delivery">Delivery method</label><select id="order-delivery" v-model="form.delivery_method" class="select-field" :disabled="isProduction"><option value="collection">Customer collection</option><option value="courier">Courier delivery</option></select></div>
                 <div v-if="editing" class="form-field"><label for="order-status">Status</label><select id="order-status" v-model="form.status" class="select-field"><option v-for="status in statusOptions" :key="status" :value="status">{{ status.replaceAll('_', ' ') }}</option></select><small v-if="form.errors.status" class="form-error">{{ form.errors.status }}</small></div>
+                <div v-if="editing" class="form-field full"><label for="order-reason">Reason for this update <span class="required-order-mark">*</span></label><input id="order-reason" v-model="form.reason" class="text-field" minlength="5" maxlength="1000" required placeholder="Explain the changes or status update"><small v-if="form.errors.reason" class="form-error">{{ form.errors.reason }}</small></div>
                 <div class="form-field full"><label for="order-address">Delivery address</label><input id="order-address" v-model="form.delivery_address" class="text-field" maxlength="255" :disabled="isProduction"></div>
                 <div v-if="editing" class="form-field"><label for="order-courier">Courier</label><input id="order-courier" v-model="form.courier" class="text-field" maxlength="120"></div>
                 <div v-if="editing" class="form-field"><label for="order-tracking">Tracking number</label><input id="order-tracking" v-model="form.tracking_number" class="text-field" maxlength="120"></div>
-                <div class="form-field full"><label for="order-measurements">Measurements (JSON object)</label><textarea id="order-measurements" v-model="measurementText" class="textarea-field" rows="3" placeholder='{"chest":"96 cm","height":"178 cm"}' :disabled="isProduction"/><small v-if="form.errors.measurements" class="form-error">{{ form.errors.measurements }}</small></div>
+                <div class="form-field full measurement-field"><div class="measurement-heading"><div><label>Garment measurements <span class="optional-label">Optional</span></label><small>Add measurements such as chest, waist, sleeve, or garment length. Include the unit with each value, for example 96 cm.</small></div><button class="secondary-link measurement-add" type="button" :disabled="isProduction" @click="measurementRows.push({ name: '', value: '' })"><Plus aria-hidden="true" /> Add measurement</button></div><div v-if="measurementRows.length" class="measurement-rows"><div v-for="(row, index) in measurementRows" :key="index" class="measurement-row"><div class="form-field"><label :for="`order-measure-name-${index}`">Measurement</label><input :id="`order-measure-name-${index}`" v-model="row.name" class="text-field" :disabled="isProduction" placeholder="e.g. Chest"></div><div class="form-field"><label :for="`order-measure-value-${index}`">Value and unit</label><input :id="`order-measure-value-${index}`" v-model="row.value" class="text-field" :disabled="isProduction" placeholder="e.g. 96 cm"></div><button class="measurement-remove" type="button" :disabled="isProduction" :aria-label="`Remove ${row.name || 'measurement'}`" @click="measurementRows.splice(index, 1)"><X aria-hidden="true" /></button></div></div><p v-else class="measurement-empty">No measurements added. You can add them when needed.</p><small v-if="form.errors.measurements" class="form-error">{{ form.errors.measurements }}</small></div>
                 <div class="form-field full"><label for="order-specs">Design specifications</label><textarea id="order-specs" v-model="form.design_specs" class="textarea-field" rows="3" maxlength="5000" :disabled="isProduction"/><small v-if="form.errors.design_specs" class="form-error">{{ form.errors.design_specs }}</small></div>
                 <div class="form-field full"><label for="order-requirements">Special requirements</label><textarea id="order-requirements" v-model="form.special_requirements" class="textarea-field" rows="2" maxlength="3000" :disabled="isProduction"/></div>
                 <div class="form-field full"><label for="order-notes">Notes</label><textarea id="order-notes" v-model="form.notes" class="textarea-field" rows="2" maxlength="3000"/></div>
-                <template v-if="editing"><div class="form-field full"><label for="order-reason">Reason for this update</label><input id="order-reason" v-model="form.reason" class="text-field" minlength="5" maxlength="1000" required><small v-if="form.errors.reason" class="form-error">{{ form.errors.reason }}</small></div></template>
                 <div v-if="form.errors.status" class="form-error full">{{ form.errors.status }}</div>
-                <div class="form-actions full"><button v-if="editing" type="button" class="secondary-link" @click="resetForm">Cancel</button><button type="submit" class="primary-button" :disabled="form.processing"><Save aria-hidden="true" />{{ form.processing ? 'Saving…' : editing ? 'Save order update' : 'Create order' }}</button></div>
+                <div class="form-actions full"><Link v-if="!editing" href="/custom-orders" class="secondary-link">Cancel</Link><button v-if="editing" type="button" class="secondary-link" @click="resetForm">Cancel</button><button type="submit" class="primary-button" :disabled="form.processing"><Save aria-hidden="true" />{{ form.processing ? 'Saving…' : editing ? 'Save order update' : 'Create order' }}</button></div>
             </form>
             <p v-if="!editing" class="workflow-note"><ClipboardList :size="16" aria-hidden="true" /> The deposit field records the required amount only. Record any receipt through Finance once custom order payment allocation is available.</p>
             <section v-if="editing" class="task-section">
@@ -276,7 +271,7 @@ function dateLabel(value: string): string {
                     <div v-else class="empty-tasks">No fitting appointments scheduled.</div>
                     <form v-if="editingFittingId" class="form-grid task-form fitting-outcome-form" @submit.prevent="submitFittingUpdate">
                         <div class="form-field"><label for="fitting-status">Outcome</label><select id="fitting-status" v-model="fittingUpdateForm.status" class="select-field"><option value="completed">Completed</option><option value="no_show">Customer did not attend</option><option value="cancelled">Cancelled</option></select></div>
-                        <div class="form-field full"><label for="fitting-measurements">Updated measurements (JSON)</label><textarea id="fitting-measurements" v-model="fittingMeasurementText" class="textarea-field" rows="3" placeholder='{"chest":"98 cm","sleeve":"61 cm"}'/><small v-if="fittingUpdateForm.errors.measurements" class="form-error">{{ fittingUpdateForm.errors.measurements }}</small></div>
+                        <div class="form-field full measurement-field"><div class="measurement-heading"><div><label>Updated garment measurements <span class="optional-label">Optional</span></label><small>Enter each updated measurement and its unit, such as 98 cm.</small></div><button class="secondary-link measurement-add" type="button" @click="fittingMeasurementRows.push({ name: '', value: '' })"><Plus aria-hidden="true" /> Add measurement</button></div><div v-if="fittingMeasurementRows.length" class="measurement-rows"><div v-for="(row, index) in fittingMeasurementRows" :key="index" class="measurement-row"><div class="form-field"><label :for="`fitting-measure-name-${index}`">Measurement</label><input :id="`fitting-measure-name-${index}`" v-model="row.name" class="text-field" placeholder="e.g. Chest"></div><div class="form-field"><label :for="`fitting-measure-value-${index}`">Value and unit</label><input :id="`fitting-measure-value-${index}`" v-model="row.value" class="text-field" placeholder="e.g. 98 cm"></div><button class="measurement-remove" type="button" :aria-label="`Remove ${row.name || 'measurement'}`" @click="fittingMeasurementRows.splice(index, 1)"><X aria-hidden="true" /></button></div></div><p v-else class="measurement-empty">No updated measurements added.</p><small v-if="fittingUpdateForm.errors.measurements" class="form-error">{{ fittingUpdateForm.errors.measurements }}</small></div>
                         <div class="form-field full"><label for="fitting-outcome">Fitting notes / alterations</label><textarea id="fitting-outcome" v-model="fittingUpdateForm.outcome" class="textarea-field" rows="2" maxlength="3000"/><small v-if="fittingUpdateForm.errors.outcome" class="form-error">{{ fittingUpdateForm.errors.outcome }}</small></div>
                         <div class="form-error full" v-if="fittingUpdateForm.errors.status">{{ fittingUpdateForm.errors.status }}</div>
                         <div class="form-actions full"><button type="button" class="secondary-link" @click="resetFittingEdit">Cancel</button><button type="submit" class="primary-button" :disabled="fittingUpdateForm.processing">Save fitting outcome</button></div>
@@ -308,10 +303,10 @@ function dateLabel(value: string): string {
             </section>
         </section>
 
-        <section class="panel">
-            <div class="panel-heading"><div><h2>Order register</h2><p>{{ orders.total.toLocaleString() }} custom orders</p></div></div>
-            <div v-if="orders.data.length" class="table-wrap"><table class="data-table"><thead><tr><th>Order</th><th>Customer / institution</th><th>Branch / owner</th><th>Item</th><th>Due</th><th>Amount</th><th>Status</th><th>Timeline / action</th></tr></thead><tbody>
-                <tr v-for="order in orders.data" :key="order.id"><td><strong>{{ order.reference }}</strong><small class="table-subline">{{ order.priority }} priority</small></td><td>{{ order.customer }}<small class="table-subline">{{ order.institution ?? 'No institution' }}</small></td><td>{{ order.location }}<small class="table-subline">{{ order.owner ?? 'Unassigned' }}</small></td><td>{{ order.quantity }} × {{ order.itemType }}<small class="table-subline">{{ [order.size, order.color].filter(Boolean).join(' · ') }}</small></td><td><span :class="order.overdue ? 'overdue-label' : ''">{{ dateLabel(order.dueDate) }}{{ order.overdue ? ' · overdue' : '' }}</span></td><td class="amount">{{ kes(order.agreedTotal) }}<small class="table-subline">Charge paid {{ kesMinor(order.chargePaidMinor) }} · due {{ kesMinor(order.chargeBalanceMinor) }}</small><small class="table-subline">Deposit held {{ kesMinor(order.depositPaidMinor) }} · due {{ kesMinor(order.depositBalanceMinor) }}</small><small class="table-subline">Contribution estimate {{ kesMinor(order.contributionEstimateMinor) }}</small></td><td><span class="status-chip" :class="order.status === 'completed' ? 'completed' : order.status === 'cancelled' ? 'damaged' : order.overdue ? 'overdue' : 'pending'">{{ order.status.replaceAll('_', ' ') }}</span><small v-if="order.courier || order.trackingNumber" class="table-subline">{{ [order.courier, order.trackingNumber].filter(Boolean).join(' · ') }}</small></td><td><details class="order-timeline"><summary>{{ order.timeline.length }} updates</summary><ol><li v-for="(event, index) in order.timeline" :key="`${event.type}-${index}`"><strong>{{ event.type.replaceAll('.', ' ') }}</strong><span>{{ event.reason ?? 'Order created' }} · {{ new Date(event.at).toLocaleString('en-KE') }}</span></li></ol></details><button v-if="canEdit" class="secondary-link compact-action" type="button" @click="beginEdit(order)">Update</button></td></tr>
+        <section v-if="view === 'orders'" class="panel">
+            <div class="panel-heading"><div><h2>Order register</h2><p>{{ orders.total.toLocaleString() }} orders</p></div></div>
+            <div v-if="orders.data.length" class="table-wrap"><table class="data-table orders-table"><thead><tr><th>Order</th><th>Customer / institution</th><th>Branch / owner</th><th>Item</th><th>Due</th><th>Amount</th><th>Status</th><th>Timeline</th><th v-if="canEdit">Action</th></tr></thead><tbody>
+                <tr v-for="order in orders.data" :key="order.id"><td><strong>{{ order.reference }}</strong><small class="table-subline">{{ order.priority }} priority</small></td><td>{{ order.customer }}<small class="table-subline">{{ order.institution ?? 'No institution' }}</small></td><td>{{ order.location }}<small class="table-subline">{{ order.owner ?? 'Unassigned' }}</small></td><td>{{ order.quantity }} × {{ order.itemType }}<small class="table-subline">{{ [order.size, order.color].filter(Boolean).join(' · ') }}</small></td><td><span :class="order.overdue ? 'overdue-label' : ''">{{ dateLabel(order.dueDate) }}{{ order.overdue ? ' · overdue' : '' }}</span></td><td class="amount">{{ kes(order.agreedTotal) }}<small class="table-subline">Charge paid {{ kesMinor(order.chargePaidMinor) }} · due {{ kesMinor(order.chargeBalanceMinor) }}</small><small class="table-subline">Deposit held {{ kesMinor(order.depositPaidMinor) }} · due {{ kesMinor(order.depositBalanceMinor) }}</small><small class="table-subline">Contribution estimate {{ kesMinor(order.contributionEstimateMinor) }}</small></td><td><span class="status-chip" :class="order.status === 'completed' ? 'completed' : order.status === 'cancelled' ? 'damaged' : order.overdue ? 'overdue' : 'pending'">{{ order.status.replaceAll('_', ' ') }}</span><small v-if="order.courier || order.trackingNumber" class="table-subline">{{ [order.courier, order.trackingNumber].filter(Boolean).join(' · ') }}</small></td><td><details class="order-timeline"><summary>{{ order.timeline.length }} updates</summary><ol><li v-for="(event, index) in order.timeline" :key="`${event.type}-${index}`"><strong>{{ event.type.replaceAll('.', ' ') }}</strong><span>{{ event.reason ?? 'Order created' }} · {{ new Date(event.at).toLocaleString('en-KE') }}</span></li></ol></details></td><td v-if="canEdit"><button class="secondary-link compact-action update-order-button" type="button" @click="beginEdit(order)"><Pencil aria-hidden="true" /> Update</button></td></tr>
             </tbody></table></div>
             <div v-else class="empty-state"><div><ClipboardList aria-hidden="true"/><strong>No custom orders yet</strong><span>New made-to-order work will appear here.</span></div></div>
             <Pagination v-if="orders.total > 0" :links="orders.links" :from="orders.from" :to="orders.to" :total="orders.total" />
@@ -320,13 +315,31 @@ function dateLabel(value: string): string {
 </template>
 
 <style scoped>
+.heading-actions { display:flex; align-items:center; justify-content:flex-end; gap:9px; flex-wrap:wrap; }
 .order-editor { margin-bottom: 18px; }
 .panel-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
 .panel-heading h2 { margin:0; font-size:17px; }
 .panel-heading p { margin:5px 0 0; color:#606874; font-size:13px; }
+.order-update-notice { display:flex; align-items:center; gap:9px; margin:0 0 16px; padding:11px 13px; border:1px solid #f1c9cd; border-radius:8px; background:#fff5f5; color:#8f1824; font-size:13px; }
+.order-update-notice :deep(svg) { width:17px; height:17px; flex:0 0 auto; }
 .form-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
 .form-field { display:grid; gap:6px; min-width:0; }
 .form-field label { font-size:12px; font-weight:650; color:#333b49; }
+.measurement-field { gap:10px; }
+.measurement-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.measurement-heading > div { display:grid; gap:4px; }
+.measurement-heading small,.measurement-empty { color:#606874; font-size:12px; }
+.measurement-heading small { line-height:1.45; }
+.optional-label { margin-left:5px; color:#737b86; font-size:11px; font-weight:500; }
+.measurement-add { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.measurement-add svg { width:15px; height:15px; }
+.measurement-rows { display:grid; gap:9px; }
+.measurement-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 36px; align-items:end; gap:10px; padding:11px; border:1px solid #e6e8eb; border-radius:8px; background:#fafbfc; }
+.measurement-remove { width:36px; height:40px; display:grid; place-items:center; border:1px solid #e4c4c7; border-radius:7px; background:#fff; color:#a51d2a; cursor:pointer; }
+.measurement-remove:hover { background:#fff0f1; }
+.measurement-remove:disabled { opacity:.55; cursor:not-allowed; }
+.measurement-remove svg { width:16px; height:16px; }
+.measurement-empty { margin:0; padding:10px 12px; border:1px dashed #d9dde3; border-radius:7px; background:#fafbfc; }
 .text-field,.select-field,.textarea-field { width:100%; min-height:40px; border:1px solid #dfe2e7; border-radius:7px; background:#fff; color:#171b24; padding:9px 11px; font:inherit; font-size:13px; }
 .textarea-field { resize:vertical; }
 .full { grid-column:1 / -1; }
@@ -353,8 +366,13 @@ function dateLabel(value: string): string {
 .task-card p { margin-top:4px; }
 .task-card > div:last-child { display:grid; justify-items:end; gap:5px; }
 .empty-tasks { padding:12px; background:#f7f8fa; border-radius:7px; }
-.table-subline { display:block; margin-top:3px; color:#606874; font-size:11px; }
+.table-subline { display:block; margin-top:4px; color:#596371; font-size:12px; line-height:1.4; }
 .compact-action { margin-top:5px; padding:4px 7px; font-size:12px; }
+.update-order-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; margin:0; padding:7px 10px; border:1px solid #f0c6ca; border-radius:7px; background:#fff7f7; color:#a51d2a; font-size:13px; font-weight:650; white-space:nowrap; cursor:pointer; transition:background .15s ease,border-color .15s ease,transform .15s ease; }
+.update-order-button:hover { border-color:#d72b38; background:#feecee; }
+.update-order-button:focus-visible { outline:3px solid #d72b3840; outline-offset:2px; }
+.update-order-button :deep(svg) { width:15px; height:15px; }
+.orders-table th:last-child,.orders-table td:last-child { min-width:100px; }
 @media (max-width:850px) { .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .table-wrap { overflow-x:auto; } }
-@media (max-width:550px) { .form-grid { grid-template-columns:1fr; } .full { grid-column:auto; } }
+@media (max-width:550px) { .form-grid { grid-template-columns:1fr; } .full { grid-column:auto; } .measurement-heading { align-items:flex-start; flex-direction:column; } .measurement-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 36px; gap:7px; padding:8px; } }
 </style>

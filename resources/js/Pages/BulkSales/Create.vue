@@ -138,11 +138,11 @@ function submitReturn(sale: Sale): void {
 .primary-button:disabled { opacity: .55; cursor: not-allowed; }
 .secondary-link { border: 1px solid #e4e6e9; background: #fff; color: #353d4b; }
 .sales-table-wrap { overflow-x: auto; }
-.sales-table-wrap table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.sales-table-wrap th, .sales-table-wrap td { padding: 10px 8px; border-top: 1px solid #eef0f3; text-align: left; vertical-align: top; }
-.sales-table-wrap th { color: #687080; font-weight: 600; }
+.sales-table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sales-table-wrap th, .sales-table-wrap td { padding: 12px 14px; border-bottom: 1px solid #e9ebee; text-align: left; vertical-align: middle; }
+.sales-table-wrap th { background: #f7f8fa; color: #46505d; font-size: 13px; font-weight: 700; }
 .sales-table-wrap td strong, .sales-table-wrap td small { display: block; }
-.sales-table-wrap td small { margin-top: 4px; color: #606874; font-size: 10px; }
+.sales-table-wrap td small { margin-top: 4px; color: #596371; font-size: 12px; }
 .money { white-space: nowrap; font-weight: 700; }
 .empty-sales { padding: 26px 0; color: #626a76; text-align: center; font-size: 12px; }
 .sale-return summary { color: #a31e2b; cursor: pointer; font-size: 11px; font-weight: 700; }

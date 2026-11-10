@@ -38,10 +38,12 @@ class CustomOrderController extends Controller
     {
         $user = $request->user();
         abort_unless($user->can('viewAny', CustomOrder::class), 403);
+        $view = $request->routeIs('custom-orders.create') ? 'create' : 'orders';
         $locationIds = $user->mayViewAllLocations() ? null : $user->locations()->where('is_active', true)->pluck('locations.id')->all();
         $today = now(config('app.timezone'))->toDateString();
 
         return Inertia::render('CustomOrders/Index', [
+            'view' => $view,
             'orders' => CustomOrder::query()->select('custom_orders.*')->with(['customer:id,name', 'institution:id,name', 'location:id,name', 'owner:id,name', 'events' => fn ($query) => $query->latest('occurred_at')->latest('id')->limit(8), 'tasks.assignee:id,name', 'fittings.assignee:id,name', 'shipmentEvents' => fn ($query) => $query->latest('occurred_at')->limit(20), 'costs' => fn ($query) => $query->latest('incurred_on')->latest('id')->limit(100)])
                 ->selectSub(Payment::query()->selectRaw('COALESCE(SUM(amount_minor), 0)')->whereColumn('custom_order_id', 'custom_orders.id')->where('status', 'received')->where('purpose', 'custom_order_charge'), 'charge_received_minor')
                 ->selectSub(PaymentRefund::query()->selectRaw('COALESCE(SUM(amount_minor), 0)')->whereIn('payment_id', Payment::query()->select('id')->whereColumn('custom_order_id', 'custom_orders.id')->where('purpose', 'custom_order_charge')), 'charge_refunded_minor')
@@ -85,7 +87,7 @@ class CustomOrderController extends Controller
     {
         $order = $save->create($request->validated(), $request->user(), $request->ip(), $request->userAgent());
 
-        return back()->with('success', "Custom order {$order->reference} created.");
+        return redirect()->route('custom-orders.index')->with('success', "Custom order {$order->reference} created.");
     }
 
     public function update(UpdateCustomOrderRequest $request, CustomOrder $customOrder, SaveCustomOrder $save): RedirectResponse

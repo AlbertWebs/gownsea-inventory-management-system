@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Boxes, ClipboardCheck, Plus, Search, ShoppingCart, ScanLine } from '@lucide/vue';
+import { Boxes, ClipboardCheck, Eye, Plus, Search, ShoppingCart, ScanLine } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import AppShell from '../../Components/AppShell.vue';
 import Pagination from '../../Components/Pagination.vue';
@@ -13,7 +13,7 @@ type BulkBalance = { id: number; productId: number; sku: string; product: string
 type BulkProduct = { id: number; sku: string; name: string };
 type BulkMovement = { id: number; product: string; sku: string; type: string; quantity: number; source: string | null; destination: string | null; staff: string | null; reason: string | null; occurredAt: string | null };
 
-const props = defineProps<{ assets: Page<Asset>; bulkStock: BulkBalance[]; bulkProducts: BulkProduct[]; bulkMovements: BulkMovement[]; filters: { q: string; status: string; location: number | null }; locations: { id: number; name: string }[]; canApproveWriteOff: boolean; canApproveCycleCount: boolean; canAdjustBulk: boolean; canInspectBulk: boolean; canSellBulk: boolean; actorId: number; pendingCounts: PendingCount[]; pendingBulkCounts: PendingBulkCount[] }>();
+const props = defineProps<{ view: 'inventory' | 'bulk-stock' | 'cycle-counts'; assets: Page<Asset>; bulkStock: BulkBalance[]; bulkProducts: BulkProduct[]; bulkMovements: BulkMovement[]; filters: { q: string; status: string; location: number | null }; locations: { id: number; name: string }[]; canApproveWriteOff: boolean; canApproveCycleCount: boolean; canAdjustBulk: boolean; canInspectBulk: boolean; canSellBulk: boolean; actorId: number; pendingCounts: PendingCount[]; pendingBulkCounts: PendingBulkCount[] }>();
 const query = ref(props.filters.q);
 const status = ref(props.filters.status);
 const location = ref(props.filters.location ? String(props.filters.location) : '');
@@ -22,6 +22,7 @@ const scannedCodes = ref('');
 const countedBulkQuantities = reactive<Record<number, string>>({});
 const selectedAssets = ref<number[]>([]);
 const labelUrl = computed(() => `/inventory/labels?${selectedAssets.value.map((id) => `assets[]=${encodeURIComponent(id)}`).join('&')}`);
+const sectionPath = computed(() => props.view === 'bulk-stock' ? '/inventory/bulk-stock' : props.view === 'cycle-counts' ? '/inventory/cycle-counts' : '/inventory');
 const countForm = useForm({ location_id: props.filters.location ? String(props.filters.location) : '', asset_codes: [] as string[], notes: '', idempotency_key: '' });
 const bulkCountForm = useForm({ location_id: props.filters.location ? String(props.filters.location) : String(props.locations[0]?.id ?? ''), counts: [] as { product_id: number; counted_on_hand: number }[], notes: '', idempotency_key: '' });
 const bulkForm = useForm({ product_id: '', movement: 'receive', direction: 'increase', quantity: '1', unit_cost: '0.00', valuation_total: '', location_id: props.filters.location ? String(props.filters.location) : String(props.locations[0]?.id ?? ''), source_location_id: props.filters.location ? String(props.filters.location) : String(props.locations[0]?.id ?? ''), destination_location_id: '', reason: '', idempotency_key: '' });
@@ -30,7 +31,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 
 watch([query, status, location], () => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => router.get('/inventory', { q: query.value || undefined, status: status.value || undefined, location: location.value || undefined }, { preserveState: true, preserveScroll: true, replace: true }), 240);
+    timer = setTimeout(() => router.get(sectionPath.value, { q: query.value || undefined, status: status.value || undefined, location: location.value || undefined }, { preserveState: true, preserveScroll: true, replace: true }), 240);
 });
 
 function inspect(asset: Asset): void {
@@ -105,15 +106,16 @@ function inspectBulk(): void {
 </script>
 
 <template>
-    <Head title="Inventory" />
+    <Head :title="view === 'bulk-stock' ? 'Bulk Stock' : view === 'cycle-counts' ? 'Cycle Count' : 'Inventory'" />
     <AppShell active="inventory">
         <div class="page-heading">
-            <div><h1>Inventory</h1><p>Serialized gown and accessory records with their last confirmed location.</p></div>
-            <div class="heading-actions"><Link v-if="canSellBulk && bulkProducts.length" href="/bulk-sales/create" class="secondary-link"><ShoppingCart aria-hidden="true" /> Sell bulk stock</Link><Link href="/inventory/create" class="primary-link"><Plus aria-hidden="true" /> Register stock</Link><Link href="/returns/scan" class="secondary-link"><ScanLine aria-hidden="true" /> Scan a return</Link></div>
+            <div><h1>{{ view === 'bulk-stock' ? 'Bulk Stock' : view === 'cycle-counts' ? 'Cycle Count' : 'Inventory' }}</h1><p>{{ view === 'bulk-stock' ? 'Review bulk quantities, valuation, movement history and returned stock inspections.' : view === 'cycle-counts' ? 'Record physical counts and review counts awaiting independent approval.' : 'Serialized gown and accessory records with their last confirmed location.' }}</p></div>
+            <div v-if="view === 'inventory'" class="heading-actions"><Link v-if="canSellBulk && bulkProducts.length" href="/bulk-sales/create" class="secondary-link"><ShoppingCart aria-hidden="true" /> Sell bulk stock</Link><Link href="/inventory/create" class="primary-link"><Plus aria-hidden="true" /> Register stock</Link><Link href="/returns/scan" class="secondary-link"><ScanLine aria-hidden="true" /> Scan a return</Link></div>
+            <div v-else-if="view === 'bulk-stock'" class="heading-actions"><Link v-if="canSellBulk && bulkProducts.length" href="/bulk-sales/create" class="secondary-link"><ShoppingCart aria-hidden="true" /> Sell bulk stock</Link><Link href="/inventory" class="secondary-link">View inventory</Link></div>
         </div>
-        <div class="toolbar">
-            <label class="global-search inventory-search"><Search aria-hidden="true" /><input v-model="query" type="search" placeholder="Search barcode, SKU, product or gown…" aria-label="Search inventory"></label>
-            <select v-model="status" class="filter-select" aria-label="Filter by asset status">
+        <div v-if="view !== 'cycle-counts'" class="toolbar">
+            <label v-if="view === 'inventory'" class="global-search inventory-search"><Search aria-hidden="true" /><input v-model="query" type="search" placeholder="Search barcode, SKU, product or gown…" aria-label="Search inventory"></label>
+            <select v-if="view === 'inventory'" v-model="status" class="filter-select" aria-label="Filter by asset status">
                 <option value="">All statuses</option>
                 <option v-for="value in ['available', 'reserved', 'hired', 'in_transit', 'returned_pending_inspection', 'cleaning', 'under_repair', 'damaged', 'missing', 'written_off']" :key="value" :value="value">{{ value.replaceAll('_', ' ') }}</option>
             </select>
@@ -121,7 +123,7 @@ function inspectBulk(): void {
                 <option value="">All assigned locations</option><option v-for="item in locations" :key="item.id" :value="item.id">{{ item.name }}</option>
             </select>
         </div>
-        <section class="panel bulk-panel">
+        <section v-if="view === 'bulk-stock'" class="panel bulk-panel">
             <div class="count-heading"><div><h2><Boxes aria-hidden="true" /> Bulk stock</h2><p>Inventory value uses moving weighted average by product and location. Rental issue and return keep the stock capitalized; a sale recognizes cost of goods sold.</p></div></div>
             <div v-if="bulkStock.length" class="table-wrap bulk-table"><table class="data-table"><thead><tr><th>Product</th><th>Location</th><th>On hand</th><th>Inventory value</th><th>Average unit cost</th><th>Valuation</th><th>Reserved</th><th>Inspection</th><th>Damaged</th><th>Available</th><th>Reorder level</th></tr></thead><tbody><tr v-for="balance in bulkStock" :key="balance.id"><td><span class="product-cell"><img v-if="balance.imageUrl" :src="balance.imageUrl" :alt="`${balance.product} product photo`" class="product-thumbnail"><span><strong>{{ balance.product }}</strong><small class="table-subline">{{ balance.sku }} · {{ balance.category }}</small></span></span></td><td>{{ balance.location }}</td><td>{{ balance.onHand }}</td><td>KES {{ (balance.inventoryValueMinor / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 }) }}</td><td>KES {{ (balance.averageCostMinor / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 }) }}</td><td><strong :class="balance.valuationComplete ? '' : 'count-alert'">{{ balance.valuationComplete ? 'Confirmed' : 'Needs valuation' }}</strong></td><td>{{ balance.reserved }}</td><td>{{ balance.pendingInspection }}</td><td>{{ balance.damaged }}</td><td><strong>{{ balance.available }}</strong></td><td><span :class="balance.available <= balance.reorderThreshold ? 'count-alert' : ''">{{ balance.reorderThreshold }}<small v-if="balance.available <= balance.reorderThreshold" class="table-subline">Reorder needed</small></span></td></tr></tbody></table></div>
             <div v-if="bulkMovements.length" class="bulk-history"><h3>Recent bulk stock ledger</h3><div v-for="movement in bulkMovements" :key="movement.id" class="bulk-history-row"><strong>{{ movement.product }} <small>{{ movement.sku }}</small></strong><span>{{ movement.type.replaceAll('_', ' ') }} · {{ movement.quantity }}</span><span>{{ movement.source ?? 'Opening' }} → {{ movement.destination ?? 'removed' }}</span><small>{{ movement.reason }} · {{ movement.staff ?? 'system' }} · {{ movement.occurredAt ?? '' }}</small></div></div>
@@ -151,7 +153,7 @@ function inspectBulk(): void {
             </form>
             <div v-else class="bulk-empty"><span>No bulk tracked products are registered.</span><Link href="/inventory/create" class="secondary-link">Register bulk product</Link></div>
         </section>
-        <section class="panel count-panel">
+        <section v-if="view === 'cycle-counts'" class="panel count-panel">
             <div class="count-heading"><div><h2><ClipboardCheck aria-hidden="true" /> Cycle count</h2><p>Scan every serialized asset physically present at one location. A different manager reviews discrepancies before stock changes.</p></div></div>
             <form class="count-form" @submit.prevent="startCycleCount">
                 <label>Location<select v-model="countForm.location_id" class="filter-select" required><option value="" disabled>Select location</option><option v-for="item in locations" :key="item.id" :value="String(item.id)">{{ item.name }}</option></select></label>
@@ -188,7 +190,7 @@ function inspectBulk(): void {
                 </div>
             </div>
         </section>
-        <section class="panel table-panel">
+        <section v-if="view === 'inventory'" class="panel table-panel">
             <div v-if="assets.data.length" class="table-wrap">
                 <table class="data-table">
                     <thead><tr><th><input type="checkbox" :checked="assets.data.length > 0 && assets.data.every((asset) => selectedAssets.includes(asset.id))" aria-label="Select all assets on this page for labels" @change="selectedAssets = ($event.target as HTMLInputElement).checked ? assets.data.map((asset) => asset.id) : []"></th><th>Asset / Barcode</th><th>Product</th><th>Classification</th><th>Size / Color</th><th>Location / Custody</th><th>Condition</th><th>Status</th><th>Last Verified</th><th>Action</th></tr></thead>
@@ -201,7 +203,7 @@ function inspectBulk(): void {
                             <td>{{ asset.size ?? '—' }} <span v-if="asset.color">· {{ asset.color }}</span></td>
                             <td>{{ asset.location }}</td><td>{{ asset.condition.replaceAll('_', ' ') }}</td>
                             <td><span class="status-chip" :class="asset.status">{{ asset.status.replaceAll('_', ' ') }}</span></td><td>{{ asset.verifiedAt ?? 'Unverified' }}</td>
-                            <td v-if="asset.status === 'returned_pending_inspection'" class="inspection-cell"><select v-model="inspectionResult[asset.id]" class="inspection-select" :aria-label="`Inspection result for ${asset.code}`"><option value="approved">Pass</option><option value="cleaning">Cleaning</option><option value="repair">Repair</option></select><button class="inspection-button" type="button" @click="inspect(asset)">Record</button></td><td v-else-if="canApproveWriteOff && asset.status === 'missing' && asset.missingReporterId !== actorId"><button class="write-off-button" type="button" @click="writeOff(asset)">Approve write-off</button></td><td v-else>—</td>
+                            <td class="asset-actions"><Link :href="`/inventory/${asset.id}`" class="asset-view-action"><Eye aria-hidden="true" /> View</Link><template v-if="asset.status === 'returned_pending_inspection'"><select v-model="inspectionResult[asset.id]" class="inspection-select" :aria-label="`Inspection result for ${asset.code}`"><option value="approved">Pass</option><option value="cleaning">Cleaning</option><option value="repair">Repair</option></select><button class="inspection-button" type="button" @click="inspect(asset)">Record</button></template><button v-else-if="canApproveWriteOff && asset.status === 'missing' && asset.missingReporterId !== actorId" class="write-off-button" type="button" @click="writeOff(asset)">Approve write-off</button></td>
                         </tr>
                     </tbody>
                 </table>
@@ -218,9 +220,13 @@ function inspectBulk(): void {
 .product-thumbnail { width:38px; height:38px; flex:0 0 38px; border:1px solid #e8eaed; border-radius:6px; background:#f5f6f7; object-fit:cover; }
 .inventory-search { width: min(360px, 100%); }
 .heading-actions { display: flex; align-items: center; gap: 8px; }
-.table-subline { display: block; margin-top: 3px; color: #606874; font-size: 9px; }
+.table-subline { display: block; margin-top: 4px; color: #596371; font-size: 12px; line-height: 1.4; }
 .empty-action { margin-top: 14px; }
 .inspection-cell { display: flex; align-items: center; gap: 5px; }
+.asset-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.asset-view-action { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 5px 9px; border: 1px solid #d9dee5; border-radius: 6px; color: #27364a; font-size: 13px; font-weight: 600; text-decoration: none; }
+.asset-view-action:hover { border-color: #bd1e2d; color: #bd1e2d; background: #fff8f8; }
+.asset-view-action :deep(svg) { width: 15px; height: 15px; }
 .inspection-select { min-height: 30px; border: 1px solid #e4e6e8; border-radius: 5px; background: #fff; padding: 0 5px; color: #596170; font-size: 9px; }
 .inspection-button { min-height: 30px; border: 0; border-radius: 5px; background: #1f2734; padding: 0 8px; color: #fff; cursor: pointer; font-size: 9px; }
 .write-off-button { min-height: 30px; border: 1px solid #c51f30; border-radius: 5px; background: #fff; padding: 0 8px; color: #a31928; cursor: pointer; font-size: 9px; }

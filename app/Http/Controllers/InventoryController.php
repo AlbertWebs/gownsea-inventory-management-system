@@ -222,6 +222,7 @@ class InventoryController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
+        $view = $request->routeIs('inventory.bulk-stock') ? 'bulk-stock' : ($request->routeIs('inventory.cycle-counts') ? 'cycle-counts' : 'inventory');
         $allowedLocationIds = $user->mayViewAllLocations()
             ? null
             : $user->locations()->where('is_active', true)->pluck('locations.id')->all();
@@ -307,6 +308,7 @@ class InventoryController extends Controller
             ]);
 
         return Inertia::render('Inventory/Index', [
+            'view' => $view,
             'assets' => $assets,
             'bulkStock' => $bulkStock,
             'bulkProducts' => $bulkProducts,

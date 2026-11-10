@@ -89,7 +89,7 @@ function eventStatusTone(status: string): string {
             <div class="calendar-meta"><span>{{ calendar.items.length }} scheduled {{ calendar.items.length === 1 ? 'item' : 'items' }}</span><div class="calendar-legend" aria-label="Calendar event types"><span><i class="tone-graduation" />Graduation</span><span><i class="tone-logistics" />Collection / delivery</span><span><i class="tone-hire" />Hire / return</span><span><i class="tone-custom" />Order / fitting</span></div></div>
             <div class="calendar-scroll">
                 <div class="calendar-grid calendar-weekdays"><span v-for="day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']" :key="day">{{ day }}</span></div>
-                <div class="calendar-grid calendar-days"><div v-for="day in calendarDays" :key="day.key" class="calendar-day" :class="{ muted: !day.inMonth, today: day.key === todayKey }"><button v-if="canManage" class="day-number day-number-button" type="button" :aria-label="`Add an event on ${dateLabel(day.key)}`" :title="`Add an event on ${dateLabel(day.key)}`" @click="startCreate(day.key)">{{ day.number }}</button><span v-else class="day-number">{{ day.number }}</span><div class="calendar-day-items"><div v-for="(item, index) in day.items.slice(0, 3)" :key="`${item.type}-${item.title}-${index}`" class="calendar-item" :class="`tone-${calendarItemTone(item)}`" :title="`${item.type}: ${item.title} · ${item.detail}`" role="group" :aria-label="`${item.type}: ${item.title}. ${item.detail}. Status: ${item.status}.`"><b>{{ item.time ? `${item.time} · ` : '' }}{{ item.type }}</b><span>{{ item.title }}</span></div><span v-if="day.items.length > 3" class="calendar-more">+{{ day.items.length - 3 }} more</span></div></div></div>
+                <div class="calendar-grid calendar-days"><div v-for="day in calendarDays" :key="day.key" class="calendar-day" :class="{ muted: !day.inMonth, today: day.key === todayKey, 'can-add-event': canManage }"><button v-if="canManage" class="calendar-cell-action" type="button" :aria-label="`Add an event on ${dateLabel(day.key)}`" :title="`Add an event on ${dateLabel(day.key)}`" @click="startCreate(day.key)"/><span class="day-number">{{ day.number }}</span><div class="calendar-day-items"><div v-for="(item, index) in day.items.slice(0, 3)" :key="`${item.type}-${item.title}-${index}`" class="calendar-item" :class="`tone-${calendarItemTone(item)}`" :title="`${item.type}: ${item.title} · ${item.detail}`" role="group" :aria-label="`${item.type}: ${item.title}. ${item.detail}. Status: ${item.status}.`"><b>{{ item.time ? `${item.time} · ` : '' }}{{ item.type }}</b><span>{{ item.title }}</span></div><span v-if="day.items.length > 3" class="calendar-more">+{{ day.items.length - 3 }} more</span></div><span v-if="canManage" class="calendar-add-hint" aria-hidden="true">+ Add event</span></div></div>
             </div>
             <div v-if="calendar.items.length === 0" class="calendar-empty">No events or operational bookings in {{ monthTitle }}.</div>
         </section>
@@ -141,11 +141,24 @@ function eventStatusTone(status: string): string {
 .calendar-weekdays { color:#68707c; font-size:9px; font-weight:750; letter-spacing:.08em; text-align:center; text-transform:uppercase; }
 .calendar-weekdays span { padding:8px 3px; }
 .calendar-days { border-top:1px solid #e8eaee; border-left:1px solid #e8eaee; border-radius:7px; overflow:hidden; }
-.calendar-day { min-width:0; min-height:112px; overflow:hidden; border-right:1px solid #e8eaee; border-bottom:1px solid #e8eaee; padding:7px; background:#fff; }
+.calendar-day { position:relative; min-width:0; min-height:112px; overflow:hidden; border-right:1px solid #e8eaee; border-bottom:1px solid #e8eaee; padding:7px; background:#fff; transition:background-color 150ms ease,box-shadow 150ms ease,transform 150ms ease; }
 .calendar-day:nth-child(7n) { border-right:0; }
 .calendar-day:nth-last-child(-n+7) { border-bottom:0; }
 .calendar-day.muted { background:#fafbfc; color:#77808d; }
+.calendar-day:hover,.calendar-day:focus-within { z-index:1; background:#fff8f8; box-shadow:inset 0 0 0 2px #e9aeb3,0 4px 12px rgb(37 48 65 / 10%); transform:translateY(-1px); }
+.calendar-day.muted:hover,.calendar-day.muted:focus-within { background:#fffafa; }
+.calendar-day.can-add-event { cursor:pointer; }
+.calendar-cell-action { position:absolute; inset:0; z-index:0; width:100%; height:100%; border:0; padding:0; background:transparent; cursor:pointer; }
+.calendar-cell-action:focus-visible { z-index:2; outline:3px solid #d42127; outline-offset:-4px; border-radius:4px; }
+.calendar-day > .day-number,.calendar-day-items { position:relative; z-index:1; }
+.calendar-day > .day-number { pointer-events:none; }
+.calendar-day-items { pointer-events:none; }
+.calendar-item,.calendar-more { pointer-events:auto; cursor:default; }
+.calendar-add-hint { z-index:1; }
+.calendar-add-hint { position:absolute; right:7px; bottom:6px; pointer-events:none; border:1px solid #f0d4d6; border-radius:999px; padding:3px 7px; background:#fff; color:#b91f2b; font-size:9px; font-weight:700; opacity:0; transform:translateY(3px); transition:opacity 140ms ease,transform 140ms ease; }
+.calendar-day.can-add-event:hover .calendar-add-hint,.calendar-day.can-add-event:focus-within .calendar-add-hint { opacity:1; transform:translateY(0); }
 .calendar-day.today { box-shadow:inset 0 0 0 1px #d42127; }
+.calendar-day.today:hover,.calendar-day.today:focus-within { box-shadow:inset 0 0 0 2px #d42127,0 4px 12px rgb(37 48 65 / 10%); }
 .day-number { display:grid; width:24px; height:24px; place-items:center; margin:0 0 5px; border-radius:50%; color:#424a57; font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; }
 .day-number-button { border:0; background:transparent; font-family:inherit; cursor:pointer; transition:background-color 140ms ease,color 140ms ease,transform 140ms ease; }
 .day-number-button:hover { background:#fff0f2; color:#bd1f30; transform:scale(1.06); }
@@ -181,13 +194,13 @@ function eventStatusTone(status: string): string {
 .event-form .full,.event-form .form-actions { grid-column:1 / -1; }
 .event-form .form-actions { justify-content:flex-start; margin-top:0; }
 .table-panel { border-color:#e6e8eb; box-shadow:0 2px 8px rgb(20 28 40 / 4%); }
-.table-panel .data-table th { color:#606977; font-size:10px; letter-spacing:.035em; }
+.table-panel .data-table th { color:#46505d; font-size:13px; letter-spacing:.025em; }
 .table-panel .data-table td { vertical-align:middle; }
 .table-panel .data-table tbody tr { transition:background-color 120ms ease; }
 .table-panel .data-table tbody tr:hover { background:#fffafa; }
-.table-panel .data-table td strong { color:#242b36; font-size:11px; }
-.table-panel .table-subline { font-size:9px; line-height:1.45; }
-.event-status { display:inline-flex; min-height:24px; align-items:center; border:1px solid transparent; border-radius:999px; padding:3px 9px; font-size:9px; font-weight:700; line-height:1; text-transform:capitalize; white-space:nowrap; }
+.table-panel .data-table td strong { color:#242b36; font-size:13px; }
+.table-panel .table-subline { font-size:12px; line-height:1.45; }
+.event-status { display:inline-flex; min-height:27px; align-items:center; border:1px solid transparent; border-radius:999px; padding:5px 10px; font-size:12px; font-weight:700; line-height:1; text-transform:capitalize; white-space:nowrap; }
 .event-status--planned { border-color:#dce5f1; background:#f0f5fb; color:#43617f; }
 .event-status--confirmed { border-color:#bfdefc; background:#edf6ff; color:#2161a0; }
 .event-status--completed { border-color:#c8e9d5; background:#ebf8ef; color:#197044; }
@@ -198,4 +211,5 @@ function eventStatusTone(status: string): string {
 @media(max-width:800px) { .event-form { grid-template-columns:repeat(2,minmax(0,1fr)); }.calendar-meta { align-items:flex-start; flex-direction:column; }.calendar-legend { justify-content:flex-start; } }
 @media(max-width:700px) { .calendar-scroll { margin:0 -2px; padding:0 2px 7px; }.calendar-grid { min-width:660px; }.calendar-day { min-height:100px; }.calendar-item { font-size:9px; } }
 @media(max-width:600px) { .event-form { grid-template-columns:1fr; }.event-form .full,.event-form .form-actions { grid-column:auto; }.calendar-panel { padding:14px; }.event-modal-backdrop { align-items:end; padding:8px; }.event-modal { max-height:92vh; border-radius:16px 16px 10px 10px; padding:17px; }.calendar-heading { flex-direction:column; gap:12px; }.calendar-heading p { margin-left:0; }.calendar-nav { align-self:flex-end; }.calendar-legend { gap:7px 11px; }.calendar-day { min-height:94px; padding:5px; } }
+@media(prefers-reduced-motion:reduce) { .calendar-day,.day-number-button,.calendar-add-hint { transition:none; }.calendar-day:hover,.calendar-day:focus-within,.day-number-button:hover,.calendar-add-hint { transform:none; } }
 </style>

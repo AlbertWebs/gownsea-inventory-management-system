@@ -5,26 +5,28 @@ Laravel 13, PHP 8.3+, Vue 3, TypeScript and Inertia application for GOWNSEA inve
 ## Local setup
 
 ```sh
+Copy-Item .env.example .env
 composer install
-cp .env.example .env
 php artisan key:generate
 npm ci
 php artisan migrate --seed
 npm run build
 ```
 
-Create a staff account with the built-in interactive command:
+Create a local staff account with the built-in interactive command. It prompts for a password:
 
 ```sh
-php artisan gownsea:create-staff-user
+php artisan gownsea:create-staff-user staff@example.test "Local Staff" --role=super_admin --location=CENTRAL-WH
 ```
 
-Run local web and queue processes in separate terminals:
+Run the local web server and queue worker in separate terminals:
 
 ```sh
-php artisan serve
+php artisan serve --host=127.0.0.1 --port=8000
 php artisan queue:work --tries=3
 ```
+
+Open `http://127.0.0.1:8000`. Local data is stored in `database/database.sqlite`; it is ignored by Git.
 
 Vite development mode (separate terminal): `npm run dev`. For Laravel's schedule, run `php artisan schedule:work` locally. Do not commit `.env` or real credentials.
 

@@ -32,8 +32,10 @@ class CustomerController extends Controller
                     ->orWhereHas('hires', fn ($hires) => $hires->whereIn('location_id', $locationIds))))
                 ->when($search !== '', fn ($query) => $query->where(fn ($customers) => $customers
                     ->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%")
-                    ->orWhere('customer_number', 'like', "%{$search}%")))
+                    ->orWhere('customer_number', 'like', "%{$search}%")
+                    ->orWhereHas('institution', fn ($institution) => $institution->where('name', 'like', "%{$search}%"))))
                 ->withCount(['hires' => fn ($hires) => $locationIds !== null ? $hires->whereIn('location_id', $locationIds) : $hires])
                 ->orderBy('name')->paginate(25)->through(fn (Customer $customer): array => [
                     'id' => $customer->id, 'customer_number' => $customer->customer_number, 'type' => $customer->type,
@@ -82,7 +84,10 @@ class CustomerController extends Controller
             'location_id' => ['required', 'integer', 'exists:locations,id'],
             'source' => ['nullable', 'in:referral,website,social,tender,direct,other'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'return_to' => ['nullable', 'in:hiring.issue'],
         ]);
+        $returnTo = $data['return_to'] ?? null;
+        unset($data['return_to']);
 
         $location = Location::query()->findOrFail($data['location_id']);
         if (! $actor->mayViewAllLocations() && ! $actor->locations()->whereKey($location->id)->exists()) {
@@ -119,6 +124,16 @@ class CustomerController extends Controller
             return $customer;
         });
 
-        return redirect()->route('customers.index')->with('success', "Customer {$customer->customer_number} was created.");
+        $createdCustomer = [
+            'id' => $customer->id,
+            'name' => $customer->name,
+            'customer_number' => $customer->customer_number,
+            'phone' => $customer->phone,
+            'institution_id' => $customer->institution_id,
+        ];
+
+        return redirect()->route($returnTo ?? 'customers.index')
+            ->with('success', "Customer {$customer->customer_number} was created.")
+            ->with('createdCustomer', $returnTo ? $createdCustomer : null);
     }
 }
