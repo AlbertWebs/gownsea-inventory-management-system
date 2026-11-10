@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { CalendarClock, Search, ScanLine, Plus, X } from '@lucide/vue';
+import { ArrowRight, CalendarClock, Check, Search, ScanLine, Plus, X } from '@lucide/vue';
 import AppShell from '../../Components/AppShell.vue';
 import Pagination from '../../Components/Pagination.vue';
 
@@ -77,7 +77,24 @@ function cancelReservation(hire: Hire): void {
                             <td data-label="Pickup location"><span class="hire-location">{{ hire.location.name }}</span></td>
                             <td data-label="Due date"><div class="hire-due" :class="`due-${dueState(hire).tone}`"><strong>{{ dueState(hire).label }}</strong><small v-if="hire.due_at">{{ dateLabel(hire.due_at) }}</small></div></td>
                             <td data-label="Status"><span class="status-chip hiring-status" :class="hire.status">{{ statusLabel(hire.status) }}</span></td>
-                            <td v-if="canOperate" data-label="Next step" class="hire-actions"><template v-if="hire.status === 'reserved'"><Link :href="`/hiring/${hire.id}/issue-reservation`" class="secondary-link compact-action">Handover</Link><button class="danger-link" type="button" @click="cancelReservation(hire)">Cancel</button></template><span v-else class="no-hire-action">No action</span></td>
+                            <td v-if="canOperate" data-label="Next step" class="hire-actions">
+                                <div v-if="hire.status === 'reserved'" class="hire-next-step next-ready">
+                                    <span class="next-step-label"><i aria-hidden="true" /> Ready for handover</span>
+                                    <Link :href="`/hiring/${hire.id}/issue-reservation`" class="hire-next-action"><span>Handover gowns</span><ArrowRight aria-hidden="true" /></Link>
+                                    <button class="cancel-reservation-action" type="button" :aria-label="`Cancel reservation ${hire.reference}`" @click="cancelReservation(hire)"><X aria-hidden="true" /><span>Cancel reservation</span></button>
+                                </div>
+                                <div v-else-if="['issued', 'partially_returned'].includes(hire.status)" class="hire-next-step next-return">
+                                    <span class="next-step-label"><i aria-hidden="true" /> {{ hire.status === 'partially_returned' ? 'Items still out' : 'Awaiting return' }}</span>
+                                    <Link href="/returns/scan" class="hire-next-action"><ScanLine aria-hidden="true" /><span>Record return</span><ArrowRight aria-hidden="true" /></Link>
+                                    <small>{{ hire.items.reduce((sum, item) => sum + item.quantity - item.returned_quantity, 0) }} gown{{ hire.items.reduce((sum, item) => sum + item.quantity - item.returned_quantity, 0) === 1 ? '' : 's' }} outstanding</small>
+                                </div>
+                                <div v-else-if="hire.status === 'returned_pending_inspection'" class="hire-next-step next-inspection">
+                                    <span class="next-step-label"><i aria-hidden="true" /> Returned for inspection</span>
+                                    <small>Gowns are awaiting an inspection decision.</small>
+                                </div>
+                                <div v-else-if="hire.status === 'completed'" class="hire-next-step next-done"><span class="next-step-label"><Check aria-hidden="true" /> Hire complete</span><small>All items have been returned.</small></div>
+                                <div v-else class="hire-next-step next-inactive"><span class="next-step-label"><i aria-hidden="true" /> Reservation cancelled</span><small>No further action required.</small></div>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -105,11 +122,11 @@ function cancelReservation(hire: Hire): void {
 .hiring-table td { vertical-align: middle; font-size: 13px; }
 .hiring-table th:nth-child(1), .hiring-table td:nth-child(1) { width: 16%; }
 .hiring-table th:nth-child(2), .hiring-table td:nth-child(2) { width: 15%; }
-.hiring-table th:nth-child(3), .hiring-table td:nth-child(3) { width: 22%; }
-.hiring-table th:nth-child(4), .hiring-table td:nth-child(4) { width: 12%; }
-.hiring-table th:nth-child(5), .hiring-table td:nth-child(5) { width: 14%; }
-.hiring-table th:nth-child(6), .hiring-table td:nth-child(6) { width: 11%; }
-.hiring-table th:nth-child(7), .hiring-table td:nth-child(7) { width: 10%; }
+.hiring-table th:nth-child(3), .hiring-table td:nth-child(3) { width: 21%; }
+.hiring-table th:nth-child(4), .hiring-table td:nth-child(4) { width: 11%; }
+.hiring-table th:nth-child(5), .hiring-table td:nth-child(5) { width: 13%; }
+.hiring-table th:nth-child(6), .hiring-table td:nth-child(6) { width: 10%; }
+.hiring-table th:nth-child(7), .hiring-table td:nth-child(7) { width: 14%; }
 .hiring-table td:nth-child(5), .hiring-table td:nth-child(6) { white-space: nowrap; }
 .hiring-table .table-subline { display: block; }
 .hire-reference { color: #272e39; font-size: 14px; font-weight: 750; letter-spacing: .01em; white-space: nowrap; }
@@ -137,11 +154,26 @@ function cancelReservation(hire: Hire): void {
 .hiring-status.completed { border: 1px solid #cce8dc; background: #edfaf4; color: #237451; }
 .hiring-status.cancelled { border: 1px solid #e6e8eb; background: #f3f4f6; color: #656c78; }
 .hiring-status.returned_pending_inspection { border: 1px solid #f4dcc0; background: #fff5e9; color: #a75b1e; }
-.hire-actions { display: flex; min-width: 0; flex-direction: column; align-items: stretch; gap: 4px; }
-.compact-action { min-height: 36px; padding: 7px 9px; font-size: 13px; white-space: nowrap; }
-.danger-link { border: 0; border-radius: 6px; background: transparent; padding: 7px; color: #b4232a; cursor: pointer; font-size: 13px; }
-.danger-link:hover { background: #fff0f0; }
-.no-hire-action { color: #747d89; font-size: 13px; }
+.hire-actions { min-width: 0; }
+.hire-next-step { display: grid; justify-items: start; gap: 7px; }
+.next-step-label { display: inline-flex; align-items: center; gap: 7px; color: #566170; font-size: 12px; font-weight: 700; line-height: 1.3; }
+.next-step-label i { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #d39a32; box-shadow: 0 0 0 3px #fff3d9; }
+.next-return .next-step-label i { background: #d89528; box-shadow: 0 0 0 3px #fff3d9; }
+.next-inspection .next-step-label i { background: #d1762e; box-shadow: 0 0 0 3px #fff0e2; }
+.next-done .next-step-label { color: #237451; }
+.next-done .next-step-label svg { width: 15px; height: 15px; }
+.next-inactive .next-step-label { color: #737b86; }
+.next-inactive .next-step-label i { background: #9299a2; box-shadow: 0 0 0 3px #f0f1f3; }
+.hire-next-step small { color: #697381; font-size: 11px; line-height: 1.35; }
+.hire-next-action { display: inline-flex; min-height: 34px; width: 100%; align-items: center; justify-content: space-between; gap: 5px; border: 1px solid #dce2e8; border-radius: 7px; background: #fff; padding: 6px 8px; color: #354153; font-size: 12px; font-weight: 700; text-decoration: none; transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease; }
+.hire-next-action svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.hire-next-action:hover { transform: translateY(-1px); border-color: #c91f2a; background: #fff8f8; color: #b91f2a; }
+.next-ready .hire-next-action { border-color: #c91f2a; background: #c91f2a; color: #fff; }
+.next-ready .hire-next-action:hover { border-color: #a91822; background: #a91822; color: #fff; }
+.cancel-reservation-action { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; padding: 0; color: #9a3c42; cursor: pointer; font: inherit; font-size: 11px; }
+.cancel-reservation-action svg { width: 13px; height: 13px; }
+.cancel-reservation-action:hover { color: #b4232a; text-decoration: underline; }
+.hire-next-action:focus-visible, .cancel-reservation-action:focus-visible { outline: 3px solid rgb(201 31 42 / 25%); outline-offset: 2px; }
 .table-panel :deep(.pagination) { font-size: 12px; }
 .table-panel :deep(.pagination-link) { min-width: 34px; min-height: 34px; font-size: 12px; }
 .empty-action { margin-top: 14px; }
@@ -174,7 +206,7 @@ function cancelReservation(hire: Hire): void {
     .hiring-table td:nth-child(3)::before { margin-bottom: 1px; }
     .hire-item-list { min-width: 0; gap: 9px; }
     .hire-item-copy strong { font-size: 12px; }
-    .hire-actions { min-width: 0; flex-direction: row; }
+    .hire-actions { min-width: 0; }
 }
 @media (max-width: 420px) { .heading-actions > * { flex-basis: 100%; }.hiring-table tbody tr { gap: 10px; padding: 11px; }.hiring-table td:nth-child(4) { grid-column: 1 / -1; } }
 </style>

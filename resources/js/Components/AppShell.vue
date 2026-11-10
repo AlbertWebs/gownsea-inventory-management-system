@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
 import {
@@ -24,6 +24,10 @@ const query = ref('');
 const results = ref<SearchResult[]>([]);
 const searching = ref(false);
 const installPrompt = ref<InstallPromptEvent | null>(null);
+const sidebarNav = ref<HTMLElement | null>(null);
+const sidebarCanScrollDown = ref(false);
+const sidebarCanScrollUp = ref(false);
+let sidebarResizeObserver: ResizeObserver | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
@@ -41,6 +45,10 @@ const canCreateOrders = computed(() => !!user.value && ['super_admin', 'manageme
 watch(isInventoryPage, (isActive) => { inventoryExpanded.value = isActive; }, { immediate: true });
 watch(isOrdersPage, (isActive) => { ordersExpanded.value = isActive; }, { immediate: true });
 watch(isPaymentsPage, (isActive) => { paymentsExpanded.value = isActive; }, { immediate: true });
+watch([collapsed, inventoryExpanded, ordersExpanded, paymentsExpanded, mobileOpen, currentPath], async () => {
+    await nextTick();
+    updateSidebarScrollCue();
+});
 const initials = computed(() => (user.value?.name ?? 'GS').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase());
 const canManageWorkspace = computed(() => !!user.value && ['super_admin', 'management'].includes(user.value.role));
 
@@ -61,6 +69,7 @@ const navigation = computed(() => [
         { label: 'Institutions', href: '/institutions', key: 'institutions', icon: Landmark },
         { label: 'Roles & Permissions', href: '/roles-permissions', key: 'roles-permissions', icon: KeyRound },
         { label: 'Settings', href: '/settings', key: 'settings', icon: Settings },
+        { label: 'SMS notifications', href: '/settings/sms', key: 'settings-sms', icon: Bell },
     ] : []),
 ]);
 
@@ -135,15 +144,39 @@ async function installApp(): Promise<void> {
     installPrompt.value = null;
 }
 
+function updateSidebarScrollCue(): void {
+    const nav = sidebarNav.value;
+    if (!nav) return;
+    sidebarCanScrollDown.value = nav.scrollHeight - nav.clientHeight - nav.scrollTop > 8;
+    sidebarCanScrollUp.value = nav.scrollTop > 8;
+}
+
+function scrollSidebar(direction: 'up' | 'down'): void {
+    const nav = sidebarNav.value;
+    if (!nav) return;
+    nav.scrollBy({ top: direction === 'down' ? Math.max(120, nav.clientHeight * 0.72) : -Math.max(120, nav.clientHeight * 0.72), behavior: 'smooth' });
+}
+
 onMounted(() => {
     window.addEventListener('beforeinstallprompt', rememberInstallPrompt);
     document.addEventListener('pointerdown', closeProfileMenuOnOutsideClick);
     document.addEventListener('keydown', closeProfileMenuOnEscape);
+    window.addEventListener('resize', updateSidebarScrollCue);
+    void nextTick(() => {
+        updateSidebarScrollCue();
+        if (sidebarNav.value && 'ResizeObserver' in window) {
+            sidebarResizeObserver = new ResizeObserver(updateSidebarScrollCue);
+            sidebarResizeObserver.observe(sidebarNav.value);
+            sidebarNav.value.querySelectorAll(':scope > *').forEach((item) => sidebarResizeObserver?.observe(item));
+        }
+    });
 });
 
 onBeforeUnmount(() => {
     if (searchTimer) clearTimeout(searchTimer);
     window.removeEventListener('beforeinstallprompt', rememberInstallPrompt);
+    window.removeEventListener('resize', updateSidebarScrollCue);
+    sidebarResizeObserver?.disconnect();
     document.removeEventListener('pointerdown', closeProfileMenuOnOutsideClick);
     document.removeEventListener('keydown', closeProfileMenuOnEscape);
 });
@@ -157,7 +190,8 @@ onBeforeUnmount(() => {
                 <img class="brand-logo-mark" :src="'/images/brand/gownsea-mark-on-dark.png'" alt="" aria-hidden="true">
             </Link>
 
-            <nav class="sidebar-nav">
+            <div class="sidebar-navigation">
+            <nav ref="sidebarNav" class="sidebar-nav" @scroll.passive="updateSidebarScrollCue">
                 <template v-for="item in navigation" :key="item.key">
                     <div v-if="item.key === 'inventory'" class="inventory-nav-group">
                         <button class="nav-link inventory-nav-trigger" type="button" :class="{ active: isInventoryPage }" :aria-expanded="inventoryExpanded" @click="inventoryExpanded = !inventoryExpanded">
@@ -203,6 +237,12 @@ onBeforeUnmount(() => {
                     </Link>
                 </template>
             </nav>
+            <button v-if="sidebarCanScrollDown || sidebarCanScrollUp" class="sidebar-scroll-cue" type="button" :aria-label="sidebarCanScrollDown ? 'Scroll navigation down' : 'Scroll navigation up'" :title="sidebarCanScrollDown ? 'More navigation below' : 'Scroll back to the top of navigation'" @click="scrollSidebar(sidebarCanScrollDown ? 'down' : 'up')">
+                <ChevronDown v-if="sidebarCanScrollDown" aria-hidden="true" />
+                <ChevronDown v-else class="scroll-cue-up" aria-hidden="true" />
+                <span v-if="!collapsed">{{ sidebarCanScrollDown ? 'More menu items' : 'Back to top' }}</span>
+            </button>
+            </div>
 
             <div class="sidebar-quote" aria-label="Celebrating every milestone in style">
                 <p>Celebrating<br>Every Milestone<br>in Style<small>GOWNSEA Graduation Wear</small></p>

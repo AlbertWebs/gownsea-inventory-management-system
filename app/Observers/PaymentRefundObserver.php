@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Actions\IssueRefundCreditNote;
 use App\Actions\PostFinancialJournal;
+use App\Actions\QueueCustomerSms;
 use App\Models\BusinessConfiguration;
 use App\Models\CustomOrderInvoiceAllocation;
 use App\Models\HireInvoiceAllocation;
@@ -15,6 +16,7 @@ class PaymentRefundObserver
     public function __construct(
         private readonly PostFinancialJournal $journal,
         private readonly IssueRefundCreditNote $creditNotes,
+        private readonly QueueCustomerSms $queueSms,
     ) {}
 
     public function created(PaymentRefund $refund): void
@@ -28,6 +30,11 @@ class PaymentRefundObserver
         if ($payment === null) {
             return;
         }
+        $payment->loadMissing(['customer', 'hire.location', 'customOrder.location', 'bulkSale.location']);
+        $this->queueSms->handle('payment_refunded', [
+            'amount' => number_format($refund->amount_minor / 100, 2),
+            'receipt' => $payment->reference,
+        ], 'payment-refunded:'.$refund->id, $payment->customer, $payment->hire, $payment->customOrder, $payment->hire?->location ?? $payment->customOrder?->location ?? $payment->bulkSale?->location);
         $invoice = $payment->purpose === 'service_charge' ? $payment->hire?->invoice : null;
         $customOrderInvoice = $payment->purpose === 'custom_order_charge' ? $payment->customOrder?->invoice : null;
         $penaltyAccrual = $payment->purpose === 'penalty'

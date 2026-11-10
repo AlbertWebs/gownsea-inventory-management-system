@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 class ReturnBulkHire
 {
-    public function __construct(private readonly RecognizeHirePenalty $recognizePenalty) {}
+    public function __construct(private readonly RecognizeHirePenalty $recognizePenalty, private readonly QueueCustomerSms $queueSms) {}
 
     /** @return array{return:BulkHireReturn,penalty_minor:int} */
     public function handle(int $hireItemId, int $quantity, Location $location, User $actor, string $idempotencyKey, string $condition, ?string $notes = null): array
@@ -86,6 +86,17 @@ class ReturnBulkHire
                 'status' => $hasOutstanding ? 'partially_returned' : ($hasInspection ? 'returned_pending_inspection' : 'completed'),
                 'completed_at' => $hasOutstanding || $hasInspection ? null : $now,
             ]);
+            if (! $hasOutstanding) {
+                $this->queueSms->handle(
+                    'hire_returned',
+                    ['reference' => $hire->reference],
+                    'hire-returned:'.$hire->id,
+                    $hire->customer,
+                    $hire,
+                    location: $location,
+                    actor: $actor,
+                );
+            }
 
             $movement = StockMovement::query()->create([
                 'product_id' => $item->product_id, 'to_location_id' => $location->id, 'actor_id' => $actor->id,

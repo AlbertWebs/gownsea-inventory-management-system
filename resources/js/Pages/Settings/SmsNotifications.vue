@@ -1,0 +1,43 @@
+<script setup lang="ts">
+import { Head, router, useForm } from '@inertiajs/vue3'
+import { computed } from 'vue'
+import { BellRing, Save, MessageSquareText, Clock3, CheckCircle2, AlertTriangle } from '@lucide/vue'
+import AppShell from '../../Components/AppShell.vue'
+import Pagination from '../../Components/Pagination.vue'
+
+type Rule = { id: number; key: string; name: string; is_enabled: boolean; intervals: number[] | null }
+type Template = { id: number; key: string; name: string; body: string; is_active: boolean; placeholders: string[] }
+type Message = { id: number; created_at: string; customer: string; recipient: string; template: string; location: string; status: string; attempts: number; description: string | null }
+const props = defineProps<{ rules: Rule[]; templates: Template[]; messages: { data: Message[]; links: { url: string | null; label: string; active: boolean }[]; from: number | null; to: number | null; total: number } }>()
+const form = useForm({ rules: props.rules.map(rule => ({ ...rule, intervals: rule.intervals ?? [] })), templates: props.templates.map(template => ({ ...template })) })
+const failedCount = computed(() => props.messages.data.filter(message => ['failed', 'delivery_unknown'].includes(message.status)).length)
+const formatPlaceholders = (values: string[]) => values.map(value => `{${value}}`).join(', ') || 'none'
+function updateIntervals(rule: Rule, value: string) {
+    const target = form.rules.find(item => item.id === rule.id)
+    if (target) target.intervals = value.split(',').map(item => Number(item.trim())).filter(item => Number.isInteger(item) && item > 0 && item <= 365)
+}
+</script>
+
+<template>
+    <Head title="SMS notifications" />
+    <AppShell active="settings-sms" title="SMS notifications">
+    <div class="sms-admin">
+        <div class="page-heading"><div><p class="eyebrow">CUSTOMER COMMUNICATIONS</p><h1>SMS notifications</h1><p>Choose which updates customers receive, set reminder timing, and review every delivery attempt.</p></div><button class="button button-primary" :disabled="form.processing" @click="form.put('/settings/sms')"><Save :size="16" /> Save settings</button></div>
+        <div class="sms-summary"><article><BellRing/><strong>{{ form.rules.filter(rule => rule.is_enabled).length }}</strong><span>Active notification types</span></article><article><MessageSquareText/><strong>{{ messages.data.length }}</strong><span>Recent message records</span></article><article :class="{ warning: failedCount }"><AlertTriangle/><strong>{{ failedCount }}</strong><span>Needs review on this page</span></article></div>
+        <section class="panel"><div class="section-heading"><div><h2>Notification rules</h2><p>Reminder intervals are days before the due date or days after it has passed.</p></div><Clock3/></div>
+            <div class="sms-rule-list"><div v-for="rule in form.rules" :key="rule.id" class="sms-rule"><label><input v-model="rule.is_enabled" type="checkbox"><span><strong>{{ rule.name }}</strong><small>{{ rule.key.replaceAll('_', ' ') }}</small></span></label><label v-if="['hire_due', 'hire_overdue', 'invoice_due', 'invoice_overdue', 'fitting_reminder'].includes(rule.key)" class="interval-field"><span>Days <small>(comma separated)</small></span><input :value="rule.intervals.join(', ')" type="text" inputmode="numeric" @change="updateIntervals(rule, ($event.target as HTMLInputElement).value)"></label><span v-else class="event-chip">Send once when it happens</span></div></div>
+        </section>
+        <section class="panel"><div class="section-heading"><div><h2>Message templates</h2><p>Keep messages brief. Dynamic values appear in braces, for example {reference}.</p></div><MessageSquareText/></div>
+            <div class="sms-template-grid"><article v-for="template in form.templates" :key="template.id" class="sms-template"><div class="template-title"><label><input v-model="template.is_active" type="checkbox"><strong>{{ template.name }}</strong></label><small>{{ template.key }}</small></div><textarea v-model="template.body" rows="3" :aria-label="`${template.name} text`"/><small>Values: {{ formatPlaceholders(template.placeholders) }}</small></article></div>
+        </section>
+        <section class="panel"><div class="section-heading"><div><h2>Recent SMS activity</h2><p>Recipients are masked here. Delivery updates may arrive after the provider accepts a message.</p></div><CheckCircle2/></div>
+            <div class="table-scroll"><table><thead><tr><th>When</th><th>Customer</th><th>Message</th><th>Branch</th><th>Status</th><th>Attempts</th><th>Details</th><th>Action</th></tr></thead><tbody><tr v-for="message in messages.data" :key="message.id"><td>{{ message.created_at }}</td><td>{{ message.customer }}<small>{{ message.recipient }}</small></td><td>{{ message.template }}</td><td>{{ message.location }}</td><td><span class="status-pill" :class="`status-${message.status}`">{{ message.status.replaceAll('_', ' ') }}</span></td><td>{{ message.attempts }}</td><td>{{ message.description || '—' }}</td><td><button v-if="message.status === 'failed' && !message.description?.toLowerCase().includes('unknown')" type="button" class="retry-button" @click="router.post(`/settings/sms/${message.id}/retry`)">Retry</button><span v-else>—</span></td></tr><tr v-if="!messages.data.length"><td colspan="8" class="empty-state">No SMS activity recorded yet.</td></tr></tbody></table></div>
+            <Pagination v-if="messages.total > 0" :links="messages.links" :from="messages.from" :to="messages.to" :total="messages.total" />
+        </section>
+    </div>
+    </AppShell>
+</template>
+
+<style scoped>
+.sms-admin{display:grid;gap:18px}.eyebrow{color:#bf1e2e;font-weight:700;font-size:12px;letter-spacing:.09em;margin:0 0 6px}.page-heading{align-items:center}.page-heading p:not(.eyebrow){margin:.4rem 0 0;color:#68748a}.panel{background:white;border:1px solid #e4e8ee;border-radius:14px;padding:20px;box-shadow:0 4px 14px #17233b08}.section-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;color:#bc1e2d}.section-heading h2{font-size:18px;color:#182236;margin:0}.section-heading p{font-size:13px;color:#68748a;margin:5px 0 0}.sms-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.sms-summary article{display:grid;grid-template-columns:38px 1fr;align-items:center;column-gap:10px;padding:16px;border:1px solid #e5e8ef;border-radius:12px;background:linear-gradient(135deg,#fff,#f7f9fc)}.sms-summary svg{grid-row:span 2;color:#be1e2d}.sms-summary strong{font-size:21px}.sms-summary span{font-size:12px;color:#718096}.sms-summary .warning svg{color:#bf6b16}.sms-rule-list{display:grid}.sms-rule{display:flex;align-items:center;justify-content:space-between;gap:20px;border-top:1px solid #edf0f4;padding:12px 4px}.sms-rule>label:first-child,.template-title label{display:flex;align-items:center;gap:11px}.sms-rule input[type=checkbox],.template-title input{accent-color:#ce202d;width:17px;height:17px}.sms-rule strong{display:block;font-size:14px}.sms-rule small,.template-title small,.sms-template>small{display:block;color:#778297;font-size:12px;margin-top:3px}.interval-field{display:flex;align-items:center;gap:10px;font-size:13px;color:#536078}.interval-field input{width:130px}.sms-admin input:not([type=checkbox]),.sms-admin textarea{border:1px solid #dbe1e9;border-radius:8px;padding:9px 11px;color:#1d2939}.event-chip{font-size:12px;color:#657187;background:#f1f4f8;border-radius:20px;padding:6px 10px}.sms-template-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.sms-template{padding:14px;border:1px solid #e8ebf0;border-radius:11px;display:grid;gap:9px}.template-title{display:flex;justify-content:space-between;align-items:start;gap:10px}.sms-template textarea{width:100%;resize:vertical;font:inherit;font-size:14px}.table-scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #edf0f4;vertical-align:top}th{background:#f6f8fa;color:#42506a}td small{display:block;color:#78849a;margin-top:4px}.status-pill{border-radius:20px;background:#eff5ff;color:#2661a5;padding:4px 9px;text-transform:capitalize}.status-failed,.status-delivery_unknown{color:#a43c12;background:#fff2e7}.status-delivered{background:#e9f8ef;color:#18794e}.empty-state{text-align:center;color:#778297;padding:32px}.retry-button{border:1px solid #d0d8e4;border-radius:7px;padding:5px 9px;background:#fff;color:#a81b29;cursor:pointer}.retry-button:hover{background:#fff3f4}@media(max-width:800px){.sms-summary,.sms-template-grid{grid-template-columns:1fr}.sms-rule{align-items:flex-start;flex-direction:column}.interval-field{width:100%;justify-content:space-between}}
+</style>

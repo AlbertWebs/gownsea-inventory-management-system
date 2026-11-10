@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Actions\PostFinancialJournal;
+use App\Actions\QueueCustomerSms;
 use App\Actions\RecognizeHirePenalty;
 use App\Models\BusinessConfiguration;
 use App\Models\CustomOrderInvoiceAllocation;
@@ -12,11 +13,21 @@ use App\Models\Payment;
 
 class PaymentObserver
 {
-    public function __construct(private readonly PostFinancialJournal $journal, private readonly RecognizeHirePenalty $recognizePenalty) {}
+    public function __construct(private readonly PostFinancialJournal $journal, private readonly RecognizeHirePenalty $recognizePenalty, private readonly QueueCustomerSms $queueSms) {}
 
     public function created(Payment $payment): void
     {
         $this->postReceipt($payment);
+        $payment->loadMissing(['customer', 'hire.location', 'customOrder.location', 'bulkSale.location']);
+        $this->queueSms->handle(
+            'payment_received',
+            ['amount' => number_format($payment->amount_minor / 100, 2), 'reference' => $payment->hire?->reference ?? $payment->customOrder?->reference ?? $payment->bulkSale?->reference ?? 'your account', 'receipt' => $payment->reference],
+            'payment-received:'.$payment->id,
+            $payment->customer,
+            $payment->hire,
+            $payment->customOrder,
+            $payment->hire?->location ?? $payment->customOrder?->location ?? $payment->bulkSale?->location,
+        );
     }
 
     public function postReceipt(Payment $payment): void

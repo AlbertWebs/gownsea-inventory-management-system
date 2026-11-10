@@ -127,6 +127,7 @@ class SaveCustomOrder
             'ready_for_collection' => 'custom_order_ready',
             'dispatched' => 'custom_order_dispatched',
             'delivered' => 'custom_order_delivered',
+            'cancelled' => 'custom_order_cancelled',
             default => null,
         };
         if ($template === null) {

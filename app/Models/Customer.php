@@ -16,11 +16,11 @@ class Customer extends Model
     use HasFactory;
     use SoftDeletes;
 
-    protected $fillable = ['customer_number', 'type', 'name', 'phone', 'email', 'institution_id', 'source', 'notes', 'sms_opt_out', 'sms_consent_at'];
+    protected $fillable = ['customer_number', 'type', 'name', 'phone', 'email', 'institution_id', 'source', 'notes', 'sms_opt_out', 'sms_consent_at', 'sms_preferences'];
 
     protected function casts(): array
     {
-        return ['sms_opt_out' => 'boolean', 'sms_consent_at' => 'datetime'];
+        return ['sms_opt_out' => 'boolean', 'sms_consent_at' => 'datetime', 'sms_preferences' => 'array'];
     }
 
     protected function phone(): Attribute

@@ -42,6 +42,7 @@ class CustomerController extends Controller
                     'name' => $customer->name, 'phone' => $customer->phone, 'email' => $customer->email,
                     'institution' => $customer->institution, 'hires_count' => $customer->hires_count,
                     'sms_consent' => ! $customer->sms_opt_out && $customer->sms_consent_at !== null,
+                    'sms_preferences' => $customer->sms_preferences ?? ['transactional' => true, 'reminders' => true, 'payments' => true, 'orders' => true],
                     'created_at' => $customer->created_at,
                 ])->withQueryString(),
             'filters' => ['q' => $search],
@@ -54,6 +55,34 @@ class CustomerController extends Controller
         $customer = $update->handle($customer, (bool) $request->validated('sms_consent'), $request->user(), $request->ip(), $request->userAgent());
 
         return back()->with('success', $customer->sms_opt_out ? 'SMS consent withdrawn. Future messages are suppressed.' : 'SMS consent recorded for this customer.');
+    }
+
+    public function updateSmsPreferences(Request $request, Customer $customer): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($user->mayViewAllLocations() || $customer->locations()->whereIn('locations.id', $user->locations()->pluck('locations.id'))->exists(), 403);
+        $data = $request->validate([
+            'preferences' => ['required', 'array:transactional,reminders,payments,orders'],
+            'preferences.transactional' => ['required', 'boolean'],
+            'preferences.reminders' => ['required', 'boolean'],
+            'preferences.payments' => ['required', 'boolean'],
+            'preferences.orders' => ['required', 'boolean'],
+        ]);
+        $before = $customer->sms_preferences;
+        $customer->update(['sms_preferences' => $data['preferences']]);
+        AuditLog::query()->create([
+            'actor_id' => $request->user()->id,
+            'action' => 'customer.sms_preferences_updated',
+            'subject_type' => Customer::class,
+            'subject_id' => $customer->id,
+            'before_state' => ['sms_preferences' => $before],
+            'after_state' => ['sms_preferences' => $customer->sms_preferences],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'occurred_at' => now(),
+        ]);
+
+        return back()->with('success', 'Customer SMS preferences updated.');
     }
 
     public function create(Request $request): Response

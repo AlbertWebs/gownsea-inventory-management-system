@@ -103,6 +103,7 @@ class InventoryController extends Controller
         return Inertia::render('Inventory/Show', [
             'asset' => [
                 'id' => $scopedAsset->id, 'code' => $scopedAsset->asset_code, 'product' => $scopedAsset->product->name,
+                'imageUrl' => $scopedAsset->product->image_path === null ? null : route('products.image', $scopedAsset->product_id),
                 'sku' => $scopedAsset->product->sku, 'category' => $scopedAsset->product->category,
                 'size' => $scopedAsset->product->size, 'color' => $scopedAsset->product->color,
                 'status' => $scopedAsset->status, 'condition' => $scopedAsset->condition,

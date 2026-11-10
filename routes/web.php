@@ -25,10 +25,14 @@ use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SmsDeliveryReportController;
+use App\Http\Controllers\SmsNotificationController;
 use App\Http\Controllers\TransferController;
 use App\Http\Controllers\UserManualController;
 use App\Http\Controllers\VendorBillController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/webhooks/sms/onfon/{token}', SmsDeliveryReportController::class)->where('token', '[A-Za-z0-9_-]{24,128}')->name('webhooks.sms.onfon');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -92,6 +96,7 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::get('/customers/create', [CustomerController::class, 'create'])->middleware('permission:customers.manage')->name('customers.create');
     Route::post('/customers', [CustomerController::class, 'store'])->middleware(['throttle:30,1', 'permission:customers.manage'])->name('customers.store');
     Route::patch('/customers/{customer}/sms-consent', [CustomerController::class, 'updateSmsConsent'])->middleware(['throttle:30,1', 'permission:customers.manage'])->name('customers.sms-consent.update');
+    Route::patch('/customers/{customer}/sms-preferences', [CustomerController::class, 'updateSmsPreferences'])->middleware(['throttle:30,1', 'permission:customers.manage'])->name('customers.sms-preferences.update');
     Route::get('/crm', [LeadController::class, 'index'])->middleware('permission:crm.manage')->name('crm.index');
     Route::post('/crm/leads', [LeadController::class, 'store'])->middleware(['throttle:30,1', 'permission:crm.manage'])->name('crm.leads.store');
     Route::patch('/crm/leads/{lead}', [LeadController::class, 'update'])->middleware(['throttle:30,1', 'permission:crm.manage'])->name('crm.leads.update');
@@ -154,6 +159,9 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/events', [GraduationEventController::class, 'store'])->middleware(['throttle:20,1', 'permission:events.manage'])->name('events.store');
     Route::patch('/events/{event}', [GraduationEventController::class, 'update'])->middleware(['throttle:30,1', 'permission:events.manage'])->name('events.update');
     Route::get('/settings', [SettingsController::class, 'index'])->middleware('permission:settings.manage')->name('settings.index');
+    Route::get('/settings/sms', [SmsNotificationController::class, 'index'])->middleware('permission:settings.manage')->name('settings.sms.index');
+    Route::put('/settings/sms', [SmsNotificationController::class, 'update'])->middleware(['throttle:10,1', 'permission:settings.manage'])->name('settings.sms.update');
+    Route::post('/settings/sms/{message}/retry', [SmsNotificationController::class, 'retry'])->middleware(['throttle:10,1', 'permission:settings.manage'])->name('settings.sms.retry');
     Route::put('/settings/finance/{configuration}', [SettingsController::class, 'saveBusinessConfiguration'])
         ->whereIn('configuration', ['business-profile', 'tax-setup', 'penalty-accounting', 'historical-cutover', 'provider-integrations', 'deployment-profile'])
         ->middleware(['throttle:10,1', 'permission:settings.manage'])->name('settings.finance.save');

@@ -127,7 +127,11 @@ function inspectBulk(): void {
             <div class="count-heading"><div><h2><Boxes aria-hidden="true" /> Bulk stock</h2><p>Inventory value uses moving weighted average by product and location. Rental issue and return keep the stock capitalized; a sale recognizes cost of goods sold.</p></div></div>
             <div v-if="bulkStock.length" class="table-wrap bulk-table"><table class="data-table"><thead><tr><th>Product</th><th>Location</th><th>On hand</th><th>Inventory value</th><th>Average unit cost</th><th>Valuation</th><th>Reserved</th><th>Inspection</th><th>Damaged</th><th>Available</th><th>Reorder level</th></tr></thead><tbody><tr v-for="balance in bulkStock" :key="balance.id"><td><span class="product-cell"><img v-if="balance.imageUrl" :src="balance.imageUrl" :alt="`${balance.product} product photo`" class="product-thumbnail"><span><strong>{{ balance.product }}</strong><small class="table-subline">{{ balance.sku }} · {{ balance.category }}</small></span></span></td><td>{{ balance.location }}</td><td>{{ balance.onHand }}</td><td>KES {{ (balance.inventoryValueMinor / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 }) }}</td><td>KES {{ (balance.averageCostMinor / 100).toLocaleString('en-KE', { minimumFractionDigits: 2 }) }}</td><td><strong :class="balance.valuationComplete ? '' : 'count-alert'">{{ balance.valuationComplete ? 'Confirmed' : 'Needs valuation' }}</strong></td><td>{{ balance.reserved }}</td><td>{{ balance.pendingInspection }}</td><td>{{ balance.damaged }}</td><td><strong>{{ balance.available }}</strong></td><td><span :class="balance.available <= balance.reorderThreshold ? 'count-alert' : ''">{{ balance.reorderThreshold }}<small v-if="balance.available <= balance.reorderThreshold" class="table-subline">Reorder needed</small></span></td></tr></tbody></table></div>
             <div v-if="bulkMovements.length" class="bulk-history"><h3>Recent bulk stock ledger</h3><div v-for="movement in bulkMovements" :key="movement.id" class="bulk-history-row"><strong>{{ movement.product }} <small>{{ movement.sku }}</small></strong><span>{{ movement.type.replaceAll('_', ' ') }} · {{ movement.quantity }}</span><span>{{ movement.source ?? 'Opening' }} → {{ movement.destination ?? 'removed' }}</span><small>{{ movement.reason }} · {{ movement.staff ?? 'system' }} · {{ movement.occurredAt ?? '' }}</small></div></div>
-            <form v-if="bulkProducts.length" class="bulk-movement-form" @submit.prevent="recordBulkMovement">
+        </section>
+        <div v-if="bulkProducts.length" class="bulk-actions-grid">
+            <section class="bulk-action-card movement-action-card">
+                <div class="bulk-action-heading"><span class="bulk-action-icon movement-icon"><Boxes aria-hidden="true" /></span><div><h3>Record stock movement</h3><p>Receive stock, adjust a count, transfer it, or set its opening valuation.</p></div></div>
+                <form class="bulk-movement-form" @submit.prevent="recordBulkMovement">
                 <label>Product<select v-model="bulkForm.product_id" class="filter-select" required><option value="" disabled>Select bulk product</option><option v-for="product in bulkProducts" :key="product.id" :value="String(product.id)">{{ product.sku }} · {{ product.name }}</option></select></label>
                 <label>Movement<select v-model="bulkForm.movement" class="filter-select"><option value="receive">Receive stock</option><option v-if="canAdjustBulk" value="adjust">Adjust count</option><option value="transfer">Transfer between locations</option><option v-if="canAdjustBulk" value="revalue">Set opening valuation</option></select></label>
                 <label v-if="['receive', 'adjust', 'revalue'].includes(bulkForm.movement)">Location<select v-model="bulkForm.location_id" class="filter-select" required><option v-for="item in locations" :key="item.id" :value="String(item.id)">{{ item.name }}</option></select></label>
@@ -139,9 +143,11 @@ function inspectBulk(): void {
                 <label class="bulk-reason">Reason<input v-model="bulkForm.reason" class="filter-select" minlength="5" maxlength="1000" placeholder="Supplier receipt, recount correction, transfer note…" required></label>
                 <button class="primary-link" type="submit" :disabled="bulkForm.processing">{{ bulkForm.processing ? 'Saving…' : 'Record movement' }}</button>
                 <small v-if="bulkForm.errors.quantity || bulkForm.errors.reason || bulkForm.errors.product_id" class="form-error">{{ bulkForm.errors.quantity || bulkForm.errors.reason || bulkForm.errors.product_id }}</small>
-            </form>
-            <form v-if="bulkProducts.length && canInspectBulk" class="bulk-movement-form inspection-form" @submit.prevent="inspectBulk">
-                <strong class="bulk-form-title">Inspect returned quantities</strong>
+                </form>
+            </section>
+            <section v-if="canInspectBulk" class="bulk-action-card inspection-action-card">
+                <div class="bulk-action-heading"><span class="bulk-action-icon inspection-icon"><ClipboardCheck aria-hidden="true" /></span><div><h3>Inspect returned stock</h3><p>Release inspected items for use or record that they need repair.</p></div></div>
+                <form class="bulk-movement-form inspection-form" @submit.prevent="inspectBulk">
                 <label>Product<select v-model="bulkInspectionForm.product_id" class="filter-select" required><option value="" disabled>Select bulk product</option><option v-for="product in bulkProducts" :key="product.id" :value="String(product.id)">{{ product.sku }} · {{ product.name }}</option></select></label>
                 <label>Location<select v-model="bulkInspectionForm.location_id" class="filter-select" required><option v-for="item in locations" :key="item.id" :value="String(item.id)">{{ item.name }}</option></select></label>
                 <label>Stock condition<select v-model="bulkInspectionForm.source" class="filter-select"><option value="pending_inspection">Returned; awaiting inspection ({{ bulkStock.filter((row) => row.productId === Number(bulkInspectionForm.product_id) && row.locationId === Number(bulkInspectionForm.location_id)).reduce((total, row) => total + row.pendingInspection, 0) }})</option><option value="damaged">Damaged, repaired and re-inspected</option></select></label>
@@ -150,9 +156,10 @@ function inspectBulk(): void {
                 <label class="bulk-reason">Inspection / repair notes<input v-model="bulkInspectionForm.reason" class="filter-select" minlength="5" maxlength="1000" required></label>
                 <button class="primary-link" type="submit" :disabled="bulkInspectionForm.processing || !bulkInspectionForm.product_id">{{ bulkInspectionForm.processing ? 'Saving…' : 'Record inspection' }}</button>
                 <small v-if="bulkInspectionForm.errors.quantity || bulkInspectionForm.errors.reason || bulkInspectionForm.errors.source || bulkInspectionForm.errors.result" class="form-error">{{ bulkInspectionForm.errors.quantity || bulkInspectionForm.errors.reason || bulkInspectionForm.errors.source || bulkInspectionForm.errors.result }}</small>
-            </form>
-            <div v-else class="bulk-empty"><span>No bulk tracked products are registered.</span><Link href="/inventory/create" class="secondary-link">Register bulk product</Link></div>
-        </section>
+                </form>
+            </section>
+        </div>
+        <div v-else class="bulk-empty"><span>No bulk tracked products are registered.</span><Link href="/inventory/create" class="secondary-link">Register bulk product</Link></div>
         <section v-if="view === 'cycle-counts'" class="panel count-panel">
             <div class="count-heading"><div><h2><ClipboardCheck aria-hidden="true" /> Cycle count</h2><p>Scan every serialized asset physically present at one location. A different manager reviews discrepancies before stock changes.</p></div></div>
             <form class="count-form" @submit.prevent="startCycleCount">
@@ -244,11 +251,24 @@ function inspectBulk(): void {
 .bulk-history-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(130px, 1fr) minmax(150px, 1fr) minmax(170px, 1.5fr); gap: 8px; align-items: center; border-top: 1px solid #f0f1f3; padding: 8px 0; color: #606874; font-size: 9px; }
 .bulk-history-row strong { color: #303743; }
 .bulk-history-row small { color: #606874; font-size: 8px; }
-.bulk-movement-form { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); align-items: end; gap: 9px; margin-top: 13px; }
-.bulk-movement-form label { display: grid; gap: 5px; color: #515967; font-size: 10px; font-weight: 600; }
-.bulk-movement-form button { justify-self: start; min-height: 34px; }
-.bulk-reason { grid-column: span 2; }
-.bulk-empty { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; color: #606874; font-size: 11px; }
+.bulk-actions-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px; margin: 18px 0 12px; }
+.bulk-action-card { min-width: 0; border: 1px solid #e4e8ef; border-radius: 13px; background: #fff; padding: 19px; box-shadow: 0 5px 18px #1d293908; }
+.movement-action-card { border-top: 3px solid #c72735; }
+.inspection-action-card { border-top: 3px solid #c89a3c; }
+.bulk-action-heading { display: flex; align-items: flex-start; gap: 12px; min-height: 54px; margin-bottom: 17px; }
+.bulk-action-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 11px; }
+.bulk-action-icon :deep(svg) { width: 19px; height: 19px; }
+.movement-icon { background: #fff0f1; color: #bd1e2d; }
+.inspection-icon { background: #fff6e7; color: #a77317; }
+.bulk-action-heading h3 { margin: 0; color: #202b3d; font-size: 16px; font-weight: 750; }
+.bulk-action-heading p { margin: 5px 0 0; color: #778398; font-size: 12px; line-height: 1.5; }
+.bulk-movement-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 13px 12px; }
+.bulk-movement-form label { display: grid; gap: 6px; color: #465267; font-size: 12px; font-weight: 650; }
+.bulk-movement-form .filter-select { width: 100%; min-height: 40px; font-size: 13px; }
+.bulk-movement-form button { justify-self: start; min-height: 38px; }
+.bulk-reason { grid-column: 1 / -1; }
+.bulk-action-card .form-error { grid-column: 1 / -1; margin: -4px 0 0; }
+.bulk-empty { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; border: 1px dashed #d7dce5; border-radius: 12px; background: #fff; padding: 20px; color: #606874; font-size: 13px; }
 .count-heading h2 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 14px; }
 .count-heading h2 :deep(svg) { width: 16px; height: 16px; color: #c51f30; }
 .count-heading p { margin: 5px 0 0; color: #606874; font-size: 10px; }
@@ -271,5 +291,6 @@ function inspectBulk(): void {
 .count-alert { color: #bd1e2d; }
 .count-clear { color: #128b53; }
 .awaiting-label { color: #626b78; }
-@media (max-width: 760px) { .count-form { grid-template-columns: 1fr; } .count-submit { grid-column: auto; align-items: flex-start; flex-direction: column; } .pending-count-row { grid-template-columns: 1fr; gap: 7px; } .count-metrics { justify-content: space-between; } .bulk-movement-form { grid-template-columns: 1fr 1fr; } .bulk-reason { grid-column: 1 / -1; } .bulk-history-row { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 1000px) { .bulk-actions-grid { grid-template-columns: 1fr; gap: 14px; } }
+@media (max-width: 760px) { .count-form { grid-template-columns: 1fr; } .count-submit { grid-column: auto; align-items: flex-start; flex-direction: column; } .pending-count-row { grid-template-columns: 1fr; gap: 7px; } .count-metrics { justify-content: space-between; } .bulk-movement-form { grid-template-columns: 1fr; } .bulk-reason { grid-column: auto; } .bulk-history-row { grid-template-columns: 1fr 1fr; } .bulk-action-card { padding: 15px; } }
 </style>

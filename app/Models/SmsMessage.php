@@ -19,6 +19,21 @@ class SmsMessage extends Model
         return $this->belongsTo(Customer::class);
     }
 
+    public function hire(): BelongsTo
+    {
+        return $this->belongsTo(Hire::class);
+    }
+
+    public function customOrder(): BelongsTo
+    {
+        return $this->belongsTo(CustomOrder::class);
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
     public function template(): BelongsTo
     {
         return $this->belongsTo(SmsTemplate::class);

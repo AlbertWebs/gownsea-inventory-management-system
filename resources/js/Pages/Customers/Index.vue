@@ -5,11 +5,14 @@ import { Plus, Search, UsersRound, X } from '@lucide/vue';
 import AppShell from '../../Components/AppShell.vue';
 import Pagination from '../../Components/Pagination.vue';
 
-type Customer = { id: number; customer_number: string; type: string; name: string; phone: string | null; email: string | null; institution: { name: string } | null; hires_count: number; sms_consent: boolean; created_at: string };
+type SmsPreferences = { transactional: boolean; reminders: boolean; payments: boolean; orders: boolean };
+type Customer = { id: number; customer_number: string; type: string; name: string; phone: string | null; email: string | null; institution: { name: string } | null; hires_count: number; sms_consent: boolean; sms_preferences: SmsPreferences; created_at: string };
 type Page<T> = { data: T[]; links: { url: string | null; label: string; active: boolean }[]; from: number | null; to: number | null; total: number };
 const props = defineProps<{ customers: Page<Customer>; filters: { q: string }; canManageSmsConsent: boolean }>();
 const query = ref(props.filters.q);
 const pendingConsentUpdates = ref<number[]>([]);
+const smsPreferenceCustomer = ref<Customer | null>(null);
+const smsPreferenceDraft = ref<SmsPreferences>({ transactional: true, reminders: true, payments: true, orders: true });
 const showingSearchResults = () => query.value.trim().length > 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 watch(query, () => {
@@ -25,6 +28,11 @@ function updateSmsConsent(customer: Customer): void {
     });
 }
 function clearSearch(): void { query.value = ''; }
+function editSmsPreferences(customer: Customer): void { smsPreferenceCustomer.value = customer; smsPreferenceDraft.value = { ...customer.sms_preferences }; }
+function saveSmsPreferences(): void {
+    if (!smsPreferenceCustomer.value) return;
+    router.patch(`/customers/${smsPreferenceCustomer.value.id}/sms-preferences`, { preferences: smsPreferenceDraft.value }, { preserveScroll: true, onSuccess: () => { smsPreferenceCustomer.value = null; } });
+}
 </script>
 
 <template>
@@ -36,10 +44,22 @@ function clearSearch(): void { query.value = ''; }
             <div class="customer-table-heading"><div><h2>Customer directory</h2><p v-if="customers.total">{{ customers.from }}–{{ customers.to }} of {{ customers.total }} {{ showingSearchResults() ? 'matches' : 'customers' }}</p><p v-else>Customer profiles appear here once they’ve been added.</p></div></div>
             <div v-if="customers.data.length" class="table-wrap">
                 <table class="data-table customer-table"><thead><tr><th>Customer</th><th>Customer No.</th><th>Institution</th><th>Phone</th><th>Email</th><th>Hire Records</th><th>Type</th><th>SMS consent</th></tr></thead>
-                    <tbody><tr v-for="customer in customers.data" :key="customer.id"><td data-label="Customer"><strong class="customer-name">{{ customer.name }}</strong></td><td data-label="Customer No."><span class="customer-number">{{ customer.customer_number }}</span></td><td data-label="Institution">{{ customer.institution?.name ?? '—' }}</td><td data-label="Phone">{{ customer.phone ?? '—' }}</td><td data-label="Email">{{ customer.email ?? '—' }}</td><td data-label="Hire records"><span class="hire-count">{{ customer.hires_count }} <span>{{ customer.hires_count === 1 ? 'hire' : 'hires' }}</span></span></td><td data-label="Type"><span class="customer-type" :class="customer.type">{{ customer.type }}</span></td><td data-label="SMS consent"><div class="sms-consent-cell"><span class="sms-status" :class="customer.sms_consent ? 'has-consent' : 'no-consent'"><span class="sms-status-dot" aria-hidden="true"></span>{{ customer.sms_consent ? 'Consent recorded' : 'No consent' }}</span><button v-if="canManageSmsConsent" type="button" class="sms-consent-button" :class="customer.sms_consent ? 'withdraw-consent' : 'record-consent'" :disabled="pendingConsentUpdates.includes(customer.id)" :aria-label="`${customer.sms_consent ? 'Withdraw' : 'Record'} SMS consent for ${customer.name}`" @click="updateSmsConsent(customer)">{{ pendingConsentUpdates.includes(customer.id) ? 'Saving…' : customer.sms_consent ? 'Withdraw' : 'Record consent' }}</button></div></td></tr></tbody>
+                    <tbody><tr v-for="customer in customers.data" :key="customer.id"><td data-label="Customer"><strong class="customer-name">{{ customer.name }}</strong></td><td data-label="Customer No."><span class="customer-number">{{ customer.customer_number }}</span></td><td data-label="Institution">{{ customer.institution?.name ?? '—' }}</td><td data-label="Phone">{{ customer.phone ?? '—' }}</td><td data-label="Email">{{ customer.email ?? '—' }}</td><td data-label="Hire records"><span class="hire-count">{{ customer.hires_count }} <span>{{ customer.hires_count === 1 ? 'hire' : 'hires' }}</span></span></td><td data-label="Type"><span class="customer-type" :class="customer.type">{{ customer.type }}</span></td><td data-label="SMS consent"><div class="sms-consent-cell"><span class="sms-status" :class="customer.sms_consent ? 'has-consent' : 'no-consent'"><span class="sms-status-dot" aria-hidden="true"></span>{{ customer.sms_consent ? 'Consent recorded' : 'No consent' }}</span><button v-if="canManageSmsConsent" type="button" class="sms-consent-button" :class="customer.sms_consent ? 'withdraw-consent' : 'record-consent'" :disabled="pendingConsentUpdates.includes(customer.id)" :aria-label="`${customer.sms_consent ? 'Withdraw' : 'Record'} SMS consent for ${customer.name}`" @click="updateSmsConsent(customer)">{{ pendingConsentUpdates.includes(customer.id) ? 'Saving…' : customer.sms_consent ? 'Withdraw' : 'Record consent' }}</button><button v-if="canManageSmsConsent" type="button" class="sms-consent-button preference-button" @click="editSmsPreferences(customer)">Preferences</button></div></td></tr></tbody>
                 </table>
             </div>
             <div v-else class="empty-state"><div><UsersRound aria-hidden="true" /><strong>{{ showingSearchResults() ? 'No customers match this search' : 'No customer records yet' }}</strong><span>{{ showingSearchResults() ? 'Try a different name, number, phone, email, or institution.' : 'Create a customer profile to start tracking contact details and gown hire history.' }}</span><button v-if="showingSearchResults()" class="secondary-link empty-clear-search" type="button" @click="clearSearch">Clear search</button><Link v-else href="/customers/create" class="primary-link empty-create-customer"><Plus aria-hidden="true" /> New customer</Link></div></div>
+        <div v-if="smsPreferenceCustomer" class="sms-preference-overlay" role="presentation" @click.self="smsPreferenceCustomer = null">
+            <section class="sms-preference-dialog" role="dialog" aria-modal="true" aria-labelledby="sms-preferences-title">
+                <button type="button" class="sms-preference-close" aria-label="Close" @click="smsPreferenceCustomer = null"><X /></button>
+                <h2 id="sms-preferences-title">SMS preferences</h2>
+                <p>Choose which updates {{ smsPreferenceCustomer.name }} can receive. SMS consent must still be recorded separately.</p>
+                <label><input v-model="smsPreferenceDraft.transactional" type="checkbox"> Important account and service updates</label>
+                <label><input v-model="smsPreferenceDraft.reminders" type="checkbox"> Return and appointment reminders</label>
+                <label><input v-model="smsPreferenceDraft.payments" type="checkbox"> Payment and balance updates</label>
+                <label><input v-model="smsPreferenceDraft.orders" type="checkbox"> Custom order and delivery updates</label>
+                <div class="sms-preference-actions"><button type="button" class="secondary-link" @click="smsPreferenceCustomer = null">Cancel</button><button type="button" class="primary-link" @click="saveSmsPreferences">Save preferences</button></div>
+            </section>
+        </div>
             <Pagination v-if="customers.total > 0" :links="customers.links" :from="customers.from" :to="customers.to" :total="customers.total" />
         </section>
     </AppShell>
@@ -67,6 +87,15 @@ function clearSearch(): void { query.value = ''; }
 .sms-consent-button.record-consent { border-color: #b9e2cb; background: #f1faf5; color: #167448; }.sms-consent-button.record-consent:hover { border-color: #63b883; background: #e7f7ee; }
 .sms-consent-button.withdraw-consent { border-color: #f0d0d2; background: #fff8f8; color: #a62932; }.sms-consent-button.withdraw-consent:hover { border-color: #d58a8e; background: #fff0f0; }
 .sms-consent-button:disabled { cursor: wait; opacity: 0.65; }
+.preference-button { color: #35435a; background: #f5f7fa; }
+.sms-preference-overlay { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 18px; background: #10182888; }
+.sms-preference-dialog { position: relative; width: min(480px, 100%); display: grid; gap: 13px; padding: 25px; border-radius: 15px; background: #fff; box-shadow: 0 20px 65px #11182740; }
+.sms-preference-dialog h2 { margin: 0; font-size: 20px; color: #172033; }
+.sms-preference-dialog p { margin: 0 0 5px; font-size: 13px; color: #627086; line-height: 1.5; }
+.sms-preference-dialog>label { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #e5e9ef; border-radius: 9px; font-size: 14px; }
+.sms-preference-dialog input { width: 17px; height: 17px; accent-color: #ce202d; }
+.sms-preference-close { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #e2e6ec; border-radius: 8px; background: #fff; cursor: pointer; }
+.sms-preference-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px; }
 .empty-clear-search,.empty-create-customer { margin-top: 14px; }
 @media(max-width:980px) { .customer-table { min-width: 860px; } }
 @media(max-width:700px) {

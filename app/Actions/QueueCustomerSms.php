@@ -8,6 +8,7 @@ use App\Models\CustomOrder;
 use App\Models\Hire;
 use App\Models\Location;
 use App\Models\SmsMessage;
+use App\Models\SmsNotificationRule;
 use App\Models\SmsTemplate;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -24,12 +25,40 @@ class QueueCustomerSms
         }
 
         $template = SmsTemplate::query()->where('key', $templateKey)->where('is_active', true)->first();
-        if ($template === null || $customer?->sms_opt_out || $customer?->sms_consent_at === null || blank($customer?->phone)) {
+        $rule = SmsNotificationRule::query()->where('key', $templateKey)->first();
+        $category = match (true) {
+            str_starts_with($templateKey, 'hire_due'), str_starts_with($templateKey, 'hire_overdue'), str_ends_with($templateKey, '_reminder') => 'reminders',
+            str_starts_with($templateKey, 'payment_'), str_starts_with($templateKey, 'invoice_') => 'payments',
+            str_starts_with($templateKey, 'custom_order_') => 'orders',
+            default => 'transactional',
+        };
+        $preferences = $customer?->sms_preferences ?? [];
+        $blockedReason = match (true) {
+            $customer?->sms_opt_out => 'Customer opted out of SMS.',
+            $customer?->sms_consent_at === null => 'Customer has not explicitly consented to SMS.',
+            blank($customer?->phone) => 'Customer has no phone number.',
+            $rule !== null && ! $rule->is_enabled => 'This notification is disabled by an administrator.',
+            is_array($preferences) && array_key_exists($category, $preferences) && ! $preferences[$category] => 'Customer has disabled this notification category.',
+            $template === null => 'No active SMS template is configured.',
+            default => null,
+        };
+        if ($blockedReason !== null) {
             return SmsMessage::query()->firstOrCreate(['idempotency_key' => $idempotencyKey], [
                 'customer_id' => $customer?->id, 'hire_id' => $hire?->id, 'custom_order_id' => $order?->id,
                 'requested_by' => $actor?->id, 'location_id' => $location?->id, 'template_id' => $template?->id,
-                'recipient' => $customer?->phone ?? '', 'body' => '', 'status' => ($customer?->sms_opt_out || $customer?->sms_consent_at === null) ? 'suppressed' : 'failed',
-                'provider_description' => $customer?->sms_opt_out ? 'Customer opted out of SMS.' : ($customer?->sms_consent_at === null ? 'Customer has not explicitly consented to SMS.' : 'No active template or customer phone number.'),
+                'recipient' => $customer?->phone ?? '', 'body' => '', 'status' => in_array($blockedReason, ['No active SMS template is configured.'], true) ? 'failed' : 'suppressed',
+                'provider_description' => $blockedReason,
+            ]);
+        }
+
+        $dayLimit = max(1, (int) config('services.sms.customer_daily_limit', 3));
+        $sentToday = SmsMessage::query()->where('customer_id', $customer->id)->whereIn('status', ['queued', 'sending', 'sent', 'delivered'])->where('created_at', '>=', now()->startOfDay())->count();
+        if ($sentToday >= $dayLimit) {
+            return SmsMessage::query()->firstOrCreate(['idempotency_key' => $idempotencyKey], [
+                'customer_id' => $customer->id, 'hire_id' => $hire?->id, 'custom_order_id' => $order?->id,
+                'requested_by' => $actor?->id, 'location_id' => $location?->id, 'template_id' => $template->id,
+                'recipient' => $customer->phone, 'body' => '', 'status' => 'suppressed',
+                'provider_description' => 'Customer daily SMS limit reached.',
             ]);
         }
 

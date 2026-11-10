@@ -1,5 +1,6 @@
 # GOWNSEA User Manual
 
+
 This guide explains how to use GOWNSEA Operations without needing technical knowledge. It covers the screens available to staff and managers. Your account may show fewer options than this guide because access depends on your role and assigned branches.
 
 ## Contents
@@ -14,6 +15,7 @@ This guide explains how to use GOWNSEA Operations without needing technical know
 - [Reports](#reports)
 - [Graduation events](#graduation-events)
 - [Institutions, staff, and settings](#institutions-staff-and-settings)
+- [SMS messages and reminders](#sms-messages-and-reminders)
 - [Account security](#account-security)
 - [Troubleshooting](#troubleshooting)
 
@@ -127,6 +129,19 @@ Open **Orders → Orders** to see made-to-order work. Select **Create custom ord
 2. Search by name, SKU, barcode, condition, location, or availability.
 3. Select an asset code to see its product, condition, current custody, and movement history.
 4. Use the **Actions** column to choose an action available for your role and that item.
+
+To review an asset's details:
+
+1. Open the serialized inventory list and select the asset code.
+2. Read the asset ID, product name, SKU, category, size, color, condition, status, and custody near the top of the page.
+3. Check **Home branch**, **Current location**, and **Last verified** to understand where the gown belongs and where it was last recorded.
+4. Choose **Copy asset ID** beside the code if you need to paste the barcode into another screen.
+5. Choose **Print label** to open a label for this asset.
+6. In **Movement history**, choose **All activity**, **Custody**, or **Stock movements** to narrow the timeline. The newest entry appears first.
+7. Read each timeline entry's date, staff member, status or location change, and any recorded notes.
+8. Choose **Inventory list** or the **Inventory** link above the heading to return to the list.
+
+**Note:** The product image appears when one has been added. The asset ID identifies the individual physical gown; the SKU identifies its product type.
 
 To register stock:
 
@@ -394,6 +409,35 @@ Never share a password, authenticator code, recovery code, or password setup lin
 1. Note the record reference, branch, date, and barcode if applicable.
 2. Contact your manager or finance lead with those details.
 3. Do not try to repair an incorrect financial or stock history by entering a second unrelated transaction.
+
+## SMS messages and reminders
+
+GOWNSEA can send service messages when a customer has a phone number, has agreed to receive SMS, and has enabled the relevant message category. Messages can confirm a hire or return, confirm a payment or recorded refund, and report custom-order progress such as collection readiness, cancellation, dispatch, delivery, or a courier update. The system can also remind customers about upcoming gown returns, overdue returns, unpaid invoice balances, and fitting appointments. When the related hire is closed, fitting is no longer scheduled, or the balance is paid, the related reminders stop.
+
+### Record consent and update a customer's preferences
+
+1. Open **Customers** from the sidebar and find the customer by name, customer number, phone, email, or institution.
+2. In **SMS consent**, choose **Record consent** only after the customer has agreed to receive SMS messages.
+3. Choose **Preferences** to select the types of messages the customer wants to receive.
+4. Select **Save preferences**. Turning off a category stops those messages, but does not record or replace the customer's main SMS consent.
+5. If the customer changes their mind about all SMS messages, choose **Withdraw**. Future messages will be suppressed until consent is recorded again.
+
+### Manage notification rules and wording
+
+1. Open **SMS notifications** in the sidebar. This page is available to administrators with workspace settings access.
+2. In **Notification rules**, turn off any message type that should not be sent.
+3. For reminder rules, enter the day intervals separated by commas. For example, `3, 1` sends reminders three days and one day before a due date; overdue intervals count days after the due date.
+4. In **Message templates**, edit the text or switch off a template. Keep the values shown below each template, such as `{reference}`, `{due_date}`, or `{amount}`, because GOWNSEA fills them in for each customer.
+5. Select **Save settings**.
+6. Review **Recent SMS activity** to see the customer, branch, message type, delivery state, attempts, and provider information. Recipient phone numbers are masked on this page. Use the page controls below the list to see older messages.
+7. A **sent** message has been accepted by the SMS provider; a **delivered** message has a successful delivery report. A **failed** message was rejected or reported undelivered. A **suppressed** message was skipped because consent, a customer preference, an administrator rule, or the daily message limit prevented it.
+8. For a message the provider confirmed it did not accept, select **Retry**. Do not retry a message marked **delivery unknown** until the provider confirms whether it was delivered.
+
+**Tip:** A sent status means the SMS provider accepted the message. A later delivery report may change it to delivered or failed. Connection timeouts can leave delivery uncertain, so check with the provider before retrying.
+
+**Note:** A customer's main consent, message category preferences, and the administrator's notification rules must all allow a message before it is sent. GOWNSEA also limits the number of messages sent to one customer each day.
+
+**Warning:** Do not change message wording in a way that removes the order, hire, receipt, or due-date information customers need to identify the update.
 
 ---
 

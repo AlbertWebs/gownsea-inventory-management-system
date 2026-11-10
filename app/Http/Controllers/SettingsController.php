@@ -94,6 +94,7 @@ class SettingsController extends Controller
             'actorId' => $request->user()->id,
             'canManageClassifications' => $request->user()->role === 'super_admin',
             'health' => [
+                'smsProviderLabel' => $smsProvider === 'onfon' ? 'Onfon' : 'Techrise',
                 'database' => $databaseAvailable ? 'available' : 'unavailable',
                 'queueDriver' => $queueDriver,
                 'queuedJobs' => $queueDriver === 'database' && $jobsTableAvailable ? DB::table('jobs')->count() : null,

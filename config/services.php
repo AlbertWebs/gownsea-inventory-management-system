@@ -45,6 +45,8 @@ return [
 
     'sms' => [
         'provider' => env('SMS_PROVIDER', 'techrise'),
+        'onfon_dlr_token' => env('ONFON_SMS_DLR_TOKEN'),
+        'customer_daily_limit' => (int) env('SMS_CUSTOMER_DAILY_LIMIT', 3),
     ],
 
     'techrise' => [

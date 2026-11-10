@@ -13,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class RecordCustomOrderShipmentEvent
 {
+    public function __construct(private readonly QueueCustomerSms $queueSms) {}
+
     /** @param array{event_type:string,provider_reference?:string|null,details?:string|null,occurred_at:string,idempotency_key:string} $data */
     public function handle(CustomOrder $order, array $data, User $actor, ?string $ipAddress = null, ?string $userAgent = null): CustomOrderShipmentEvent
     {
@@ -59,6 +61,13 @@ class RecordCustomOrderShipmentEvent
                 'user_agent' => $userAgent,
                 'occurred_at' => now(),
             ]);
+
+            $order->loadMissing('customer', 'location');
+            $this->queueSms->handle('custom_order_shipment_update', [
+                'reference' => $order->reference,
+                'status' => str_replace('_', ' ', $event->event_type),
+                'tracking' => $event->provider_reference ?: $order->tracking_number ?: 'not provided',
+            ], 'custom-order-shipment:'.$event->id, $order->customer, order: $order, location: $order->location, actor: $actor);
 
             return $event;
         }, attempts: 3);
